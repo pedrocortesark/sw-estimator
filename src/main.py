@@ -4,57 +4,56 @@ from fastapi import FastAPI
 
 from src.core.config import get_settings
 from src.core.logging import logger, setup_logging
-from src.routers import health
+from src.routers import health, estimation
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Ciclo de vida de la aplicación.
+    """Application lifespan handler.
 
-    El código ANTES del `yield` se ejecuta al arrancar el servidor.
-    El código DESPUÉS del `yield` se ejecuta al apagarlo.
+    Code BEFORE `yield` runs at server startup.
+    Code AFTER `yield` runs at server shutdown.
 
-    Es el lugar correcto para inicializar recursos (logger, clientes HTTP,
-    conexiones a BD...) y limpiarlos al cerrar.
+    This is the correct place to initialise resources (logger, HTTP clients,
+    DB connections, etc.) and clean them up on exit.
     """
     # --- Startup ---
     setup_logging()
     settings = get_settings()
     logger.info(
-        f"Arrancando sw-estimator | env={settings.app_env} | provider={settings.llm_provider}"
+        f"Starting sw-estimator | env={settings.app_env} | provider={settings.llm_provider}"
     )
 
-    yield  # <-- aquí FastAPI atiende requests
+    yield  # <-- FastAPI serves requests here
 
     # --- Shutdown ---
-    logger.info("Apagando sw-estimator...")
+    logger.info("Shutting down sw-estimator...")
 
 
 def create_app() -> FastAPI:
-    """Factory function que crea y configura la instancia de FastAPI.
+    """Factory function that creates and configures the FastAPI instance.
 
-    Usar una factory en lugar de una variable global facilita mucho los tests:
-    cada test puede crear su propia instancia limpia de la app.
+    Using a factory instead of a module-level global makes testing much easier:
+    each test can spin up its own clean app instance.
     """
     settings = get_settings()
 
     app = FastAPI(
         title="SW Estimator",
-        description="Estima el esfuerzo de software a partir de transcripciones de reuniones usando LLMs (CAG).",
+        description="Estimates software development effort from meeting transcriptions using LLMs (CAG architecture).",
         version="0.1.0",
         lifespan=lifespan,
-        # En producción ocultamos los docs de la API
+        # Hide API docs in production
         docs_url="/docs" if settings.app_env != "production" else None,
         redoc_url="/redoc" if settings.app_env != "production" else None,
     )
 
     app.include_router(health.router)
-    # El router de estimaciones se añadirá en la Fase 7:
-    # app.include_router(estimation_router, prefix="/api/v1")
+    app.include_router(estimation.router)
 
     return app
 
 
-# Instancia global que uvicorn usa para arrancar el servidor:
+# Global instance used by uvicorn to start the server:
 # uvicorn src.main:app
 app = create_app()
