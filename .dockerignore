@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+
+# Virtual environment — Docker creates its own
+.venv/
+
+# Environment files — secrets must never go into the image
+.env
+.env.*
+!.env.example
+
+# Version control
+.git/
+.gitignore
+
+# Editor
+.vscode/
+.idea/
+
+# Tests (not needed at runtime)
+tests/
+
+# uv cache
+.uv/
+uv.lock

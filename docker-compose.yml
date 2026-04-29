@@ -1,0 +1,28 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime # Use the runtime stage (not the builder)
+
+    image: sw-estimator:latest
+
+    ports:
+      - "8000:8000" # host_port:container_port
+
+    # Load environment variables from .env file.
+    # The .env file is NEVER copied into the image (see .dockerignore).
+    # It is only read at runtime by docker compose on the host machine.
+    env_file:
+      - .env
+
+    # Override specific env vars for the containerised environment.
+    # APP_ENV=production hides /docs and /redoc endpoints.
+    environment:
+      - APP_ENV=production
+
+    # Restart policy: restart the container automatically if it crashes.
+    # "unless-stopped" means it restarts on failure but not if you stop it manually.
+    restart: unless-stopped
+    # docker compose respects the HEALTHCHECK defined in the Dockerfile.
+    # You can check status with: docker compose ps
