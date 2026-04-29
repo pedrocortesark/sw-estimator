@@ -91,7 +91,8 @@ async def test_estimate_returns_422_when_transcript_too_short(client: AsyncClien
 async def test_estimate_returns_400_for_unknown_provider(client: AsyncClient):
     """Requesting an unsupported provider name must return HTTP 400.
 
-    The router catches ValueError from _get_provider() and converts it to 400.
+    The service raises UnknownProviderError, which is caught by the global
+    exception handler in main.py and converted to a 400 response.
     Here we let the real service run — the error is triggered before any LLM call.
     """
     response = await client.post(

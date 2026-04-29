@@ -9,8 +9,12 @@ This module is responsible for:
    structured EstimationResponse.
 """
 
+import anthropic
+import openai
+
 from src.context.examples import ESTIMATION_EXAMPLES
 from src.core.config import get_settings
+from src.core.exceptions import ProviderAuthError, ProviderRateLimitError, UnknownProviderError
 from src.core.logging import logger
 from src.schemas.estimation import EstimationResponse
 from src.services.anthropic_provider import AnthropicProvider
@@ -70,7 +74,7 @@ def _get_provider(provider_name: str) -> BaseLLMProvider:
         return OpenAIProvider()
     if provider_name == "anthropic":
         return AnthropicProvider()
-    raise ValueError(
+    raise UnknownProviderError(
         f"Unsupported LLM provider: '{provider_name}'. "
         "Valid options are: 'openai', 'anthropic'."
     )
@@ -97,10 +101,17 @@ async def generate_estimation(
     provider = _get_provider(provider_name)
     system_prompt = _build_system_prompt()
 
-    estimation_text, model_used = await provider.complete(
-        system_prompt=system_prompt,
-        user_message=f"Meeting transcript:\n{transcript}",
-    )
+    try:
+        estimation_text, model_used = await provider.complete(
+            system_prompt=system_prompt,
+            user_message=f"Meeting transcript:\n{transcript}",
+        )
+    except (openai.RateLimitError, anthropic.RateLimitError) as exc:
+        logger.warning(f"Rate limit hit | provider={provider_name}")
+        raise ProviderRateLimitError() from exc
+    except (openai.AuthenticationError, anthropic.AuthenticationStatusError) as exc:
+        logger.error(f"Authentication failed | provider={provider_name}")
+        raise ProviderAuthError() from exc
 
     logger.info(f"Estimation generated successfully | provider={provider_name} | model={model_used}")
 
