@@ -28,3 +28,10 @@ dev = [
 
 [tool.hatch.build.targets.wheel]
 packages = ["src"]
+
+[tool.pytest.ini_options]
+# Run all async tests automatically without needing @pytest.mark.asyncio on each one.
+# "auto" mode: any async test function is treated as an asyncio coroutine.
+asyncio_mode = "auto"
+# Only look for tests inside the tests/ directory
+testpaths = ["tests"]
