@@ -45,6 +45,11 @@ class AnthropicProvider(BaseLLMProvider):
             raise ProviderConnectionError(str(exc)) from exc
         except anthropic.InternalServerError as exc:
             raise ProviderInternalError(str(exc)) from exc
+        except anthropic.APIStatusError as exc:
+            # Catch-all for any other HTTP error codes not explicitly handled above
+            # (e.g. 409 Conflict). Re-raise as generic EstimatorError so the
+            # fallback handler in exceptions.py returns a 500 with a safe message.
+            raise ProviderInternalError(str(exc)) from exc
 
         text = response.content[0].text
         logger.debug(
