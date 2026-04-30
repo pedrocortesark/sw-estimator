@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from httpx import AsyncClient
 
-from src.schemas.estimation import EstimationResponse
+from src.schemas.estimation import EstimationResponse, UsageCost
 
 # A realistic transcript that passes the min_length=20 validation rule
 VALID_TRANSCRIPT = (
@@ -19,6 +19,12 @@ MOCK_RESPONSE = EstimationResponse(
     estimation="## Estimation\n\n| Task | Hours |\n|---|---|\n| Backend | 40 |\n\n**Total: 40 hours**",
     provider_used="anthropic",
     model_used="claude-3-5-haiku-20241022",
+    usage=UsageCost(
+        input_tokens=500,
+        output_tokens=200,
+        total_tokens=700,
+        cost_usd=0.000150,
+    ),
 )
 
 
