@@ -47,5 +47,7 @@ class AnthropicProvider(BaseLLMProvider):
             raise ProviderInternalError(str(exc)) from exc
 
         text = response.content[0].text
-        logger.debug(f"Anthropic response received | stop_reason={response.stop_reason}")
+        logger.debug(
+            f"Anthropic response received | stop_reason={response.stop_reason}"
+        )
         return text, self._model

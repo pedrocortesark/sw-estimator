@@ -91,7 +91,9 @@ def setup_exception_handlers(app) -> None:
     ) -> JSONResponse:
         return JSONResponse(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            content={"detail": "Could not reach the LLM provider. Please try again later."},
+            content={
+                "detail": "Could not reach the LLM provider. Please try again later."
+            },
         )
 
     @app.exception_handler(ProviderInternalError)
@@ -100,7 +102,9 @@ def setup_exception_handlers(app) -> None:
     ) -> JSONResponse:
         return JSONResponse(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            content={"detail": "The LLM provider returned an internal error. Please retry."},
+            content={
+                "detail": "The LLM provider returned an internal error. Please retry."
+            },
         )
 
     @app.exception_handler(UnknownProviderError)
@@ -125,7 +129,9 @@ def setup_exception_handlers(app) -> None:
 
     @app.exception_handler(Exception)
     async def unhandled_error_handler(request: Request, exc: Exception) -> JSONResponse:
-        logger.exception(f"Unhandled exception on {request.method} {request.url.path}: {exc}")
+        logger.exception(
+            f"Unhandled exception on {request.method} {request.url.path}: {exc}"
+        )
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content={
