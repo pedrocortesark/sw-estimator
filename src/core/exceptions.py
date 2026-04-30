@@ -28,6 +28,18 @@ class ProviderAuthError(EstimatorError):
     """The LLM provider rejected the request due to invalid credentials (HTTP 401)."""
 
 
+class ProviderBadRequestError(EstimatorError):
+    """The request was malformed — bad model name, invalid parameters, etc. (HTTP 400)."""
+
+
+class ProviderConnectionError(EstimatorError):
+    """Could not reach the LLM provider — network issue or service outage."""
+
+
+class ProviderInternalError(EstimatorError):
+    """The LLM provider returned a server-side error (HTTP 5xx). Not the caller's fault."""
+
+
 class UnknownProviderError(EstimatorError):
     """An unsupported provider name was requested."""
 
@@ -62,6 +74,33 @@ def setup_exception_handlers(app) -> None:
         return JSONResponse(
             status_code=status.HTTP_401_UNAUTHORIZED,
             content={"detail": "Invalid or missing LLM provider credentials."},
+        )
+
+    @app.exception_handler(ProviderBadRequestError)
+    async def bad_request_handler(
+        request: Request, exc: ProviderBadRequestError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            content={"detail": f"Invalid request to LLM provider: {exc}"},
+        )
+
+    @app.exception_handler(ProviderConnectionError)
+    async def connection_error_handler(
+        request: Request, exc: ProviderConnectionError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={"detail": "Could not reach the LLM provider. Please try again later."},
+        )
+
+    @app.exception_handler(ProviderInternalError)
+    async def provider_internal_handler(
+        request: Request, exc: ProviderInternalError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            content={"detail": "The LLM provider returned an internal error. Please retry."},
         )
 
     @app.exception_handler(UnknownProviderError)
