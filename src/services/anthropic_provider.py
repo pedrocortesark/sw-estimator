@@ -11,7 +11,7 @@ from src.core.exceptions import (
     ProviderRateLimitError,
 )
 from src.core.logging import logger
-from src.services.base_llm import BaseLLMProvider
+from src.services.base_llm import BaseLLMProvider, ProviderUsage
 
 
 class AnthropicProvider(BaseLLMProvider):
@@ -22,7 +22,9 @@ class AnthropicProvider(BaseLLMProvider):
         self._model = settings.anthropic_model
         self._client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
 
-    async def complete(self, system_prompt: str, user_message: str) -> tuple[str, str]:
+    async def complete(
+        self, system_prompt: str, user_message: str
+    ) -> tuple[str, str, ProviderUsage]:
         logger.debug(f"Sending request to Anthropic | model={self._model}")
 
         try:
@@ -51,8 +53,14 @@ class AnthropicProvider(BaseLLMProvider):
             # fallback handler in exceptions.py returns a 500 with a safe message.
             raise ProviderInternalError(str(exc)) from exc
 
-        text = response.content[0].text
-        logger.debug(
-            f"Anthropic response received | stop_reason={response.stop_reason}"
+        usage = ProviderUsage(
+            input_tokens=response.usage.input_tokens,
+            output_tokens=response.usage.output_tokens,
         )
-        return text, self._model
+        logger.debug(
+            f"Anthropic response received"
+            f" | stop_reason={response.stop_reason}"
+            f" | input_tokens={usage.input_tokens}"
+            f" | output_tokens={usage.output_tokens}"
+        )
+        return response.content[0].text, self._model, usage

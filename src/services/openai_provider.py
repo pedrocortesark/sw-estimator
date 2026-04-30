@@ -18,7 +18,7 @@ from src.core.exceptions import (
     ProviderRateLimitError,
 )
 from src.core.logging import logger
-from src.services.base_llm import BaseLLMProvider
+from src.services.base_llm import BaseLLMProvider, ProviderUsage
 
 
 class OpenAIProvider(BaseLLMProvider):
@@ -29,7 +29,9 @@ class OpenAIProvider(BaseLLMProvider):
         self._model = settings.openai_model
         self._client = AsyncOpenAI(api_key=settings.openai_api_key)
 
-    async def complete(self, system_prompt: str, user_message: str) -> tuple[str, str]:
+    async def complete(
+        self, system_prompt: str, user_message: str
+    ) -> tuple[str, str, ProviderUsage]:
         logger.debug(f"Sending request to OpenAI | model={self._model}")
 
         try:
@@ -51,6 +53,13 @@ class OpenAIProvider(BaseLLMProvider):
         except InternalServerError as exc:
             raise ProviderInternalError(str(exc)) from exc
 
-        text = response.output_text
-        logger.debug(f"OpenAI response received | tokens={response.usage.total_tokens}")
-        return text, self._model
+        usage = ProviderUsage(
+            input_tokens=response.usage.input_tokens,
+            output_tokens=response.usage.output_tokens,
+        )
+        logger.debug(
+            f"OpenAI response received"
+            f" | input_tokens={usage.input_tokens}"
+            f" | output_tokens={usage.output_tokens}"
+        )
+        return response.output_text, self._model, usage

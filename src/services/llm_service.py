@@ -14,12 +14,17 @@ import openai
 
 from src.context.examples import ESTIMATION_EXAMPLES
 from src.core.config import get_settings
-from src.core.exceptions import ProviderAuthError, ProviderRateLimitError, UnknownProviderError
+from src.core.exceptions import (
+    ProviderAuthError,
+    ProviderRateLimitError,
+    UnknownProviderError,
+)
 from src.core.logging import logger
-from src.schemas.estimation import EstimationResponse
+from src.schemas.estimation import EstimationResponse, UsageCost
 from src.services.anthropic_provider import AnthropicProvider
 from src.services.base_llm import BaseLLMProvider
 from src.services.openai_provider import OpenAIProvider
+from src.services.pricing import calculate_cost
 
 
 def _build_system_prompt() -> str:
@@ -82,7 +87,8 @@ def _get_provider(provider_name: str) -> BaseLLMProvider:
 
 async def generate_estimation(
     transcript: str,
-    provider_override: str | None = None,) -> EstimationResponse:
+    provider_override: str | None = None,
+) -> EstimationResponse:
     """Generate a software effort estimation from a meeting transcript.
 
     Args:
@@ -102,7 +108,7 @@ async def generate_estimation(
     system_prompt = _build_system_prompt()
 
     try:
-        estimation_text, model_used = await provider.complete(
+        estimation_text, model_used, provider_usage = await provider.complete(
             system_prompt=system_prompt,
             user_message=f"Meeting transcript:\n{transcript}",
         )
@@ -113,10 +119,26 @@ async def generate_estimation(
         logger.error(f"Authentication failed | provider={provider_name}")
         raise ProviderAuthError() from exc
 
-    logger.info(f"Estimation generated successfully | provider={provider_name} | model={model_used}")
+    cost_usd = calculate_cost(
+        model_used, provider_usage.input_tokens, provider_usage.output_tokens
+    )
+    logger.info(
+        f"Estimation generated successfully"
+        f" | provider={provider_name}"
+        f" | model={model_used}"
+        f" | input_tokens={provider_usage.input_tokens}"
+        f" | output_tokens={provider_usage.output_tokens}"
+        f" | cost_usd={cost_usd:.6f}"
+    )
 
     return EstimationResponse(
         estimation=estimation_text,
         provider_used=provider_name,
         model_used=model_used,
+        usage=UsageCost(
+            input_tokens=provider_usage.input_tokens,
+            output_tokens=provider_usage.output_tokens,
+            total_tokens=provider_usage.input_tokens + provider_usage.output_tokens,
+            cost_usd=cost_usd,
+        ),
     )
