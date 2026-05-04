@@ -63,3 +63,49 @@ class OpenAIProvider(BaseLLMProvider):
             f" | output_tokens={usage.output_tokens}"
         )
         return response.output_text, self._model, usage
+
+    async def stream_complete(
+        self, system_prompt: str, user_message: str
+    ) -> "AsyncGenerator[str | ProviderUsage | str, None]":
+        from typing import AsyncGenerator
+        logger.debug(f"Sending stream request to OpenAI | model={self._model}")
+
+        try:
+            stream = await self._client.responses.create(
+                model=self._model,
+                instructions=system_prompt,
+                input=user_message,
+                temperature=0.2,
+                store=False,
+                stream=True,
+            )
+            
+            final_usage = None
+            async for event in stream:
+                if event.type == 'response.output_text.delta':
+                    yield event.delta
+                elif event.type == 'response.completed':
+                    final_usage = event.response.usage
+                    
+        except AuthenticationError as exc:
+            raise ProviderAuthError(str(exc)) from exc
+        except RateLimitError as exc:
+            raise ProviderRateLimitError(str(exc)) from exc
+        except BadRequestError as exc:
+            raise ProviderBadRequestError(str(exc)) from exc
+        except APIConnectionError as exc:
+            raise ProviderConnectionError(str(exc)) from exc
+        except InternalServerError as exc:
+            raise ProviderInternalError(str(exc)) from exc
+
+        usage = ProviderUsage(
+            input_tokens=final_usage.input_tokens if final_usage else 0,
+            output_tokens=final_usage.output_tokens if final_usage else 0,
+        )
+        logger.debug(
+            f"OpenAI stream completed"
+            f" | input_tokens={usage.input_tokens}"
+            f" | output_tokens={usage.output_tokens}"
+        )
+        yield {"model": self._model, "usage": usage}
+

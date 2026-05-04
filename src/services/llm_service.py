@@ -155,3 +155,72 @@ async def generate_estimation(
             cost_usd=cost_usd,
         ),
     )
+
+from typing import AsyncGenerator
+
+async def stream_estimation(
+    transcript: str,
+    provider_override: str | None = None,
+) -> AsyncGenerator[str | EstimationResponse, None]:
+    """Generate a software effort estimation using streaming.
+
+    Yields:
+        A sequence of text chunks.
+        The final yielded item is an EstimationResponse object containing
+        the full text, model used, and usage cost details.
+    """
+    settings = get_settings()
+    provider_name = provider_override or settings.llm_provider
+
+    logger.info(f"Starting estimation stream | provider={provider_name}")
+
+    provider = _get_provider(provider_name)
+    system_prompt = _build_system_prompt()
+
+    try:
+        stream = provider.stream_complete(
+            system_prompt=system_prompt,
+            user_message=f"Meeting transcript:\n{transcript}",
+        )
+        
+        full_text = ""
+        model_used = ""
+        provider_usage = None
+        
+        async for chunk in stream:
+            if isinstance(chunk, str):
+                full_text += chunk
+                yield chunk
+            elif isinstance(chunk, dict):
+                model_used = chunk.get("model", "")
+                provider_usage = chunk.get("usage")
+                
+    except (openai.RateLimitError, anthropic.RateLimitError) as exc:
+        logger.warning(f"Rate limit hit during stream | provider={provider_name}")
+        raise ProviderRateLimitError() from exc
+    except (openai.AuthenticationError, anthropic.AuthenticationStatusError) as exc:
+        logger.error(f"Authentication failed during stream | provider={provider_name}")
+        raise ProviderAuthError() from exc
+
+    if provider_usage and model_used:
+        cost_usd = calculate_cost(
+            model_used, provider_usage.input_tokens, provider_usage.output_tokens
+        )
+        logger.info(
+            f"Estimation stream finished successfully"
+            f" | provider={provider_name}"
+            f" | model={model_used}"
+            f" | cost_usd={cost_usd:.6f}"
+        )
+        
+        yield EstimationResponse(
+            estimation=full_text,
+            provider_used=provider_name,
+            model_used=model_used,
+            usage=UsageCost(
+                input_tokens=provider_usage.input_tokens,
+                output_tokens=provider_usage.output_tokens,
+                total_tokens=provider_usage.input_tokens + provider_usage.output_tokens,
+                cost_usd=cost_usd,
+            ),
+        )

@@ -4,7 +4,27 @@ import asyncio
 import streamlit as st
 
 # Importamos la función asíncrona de generación de estimaciones del backend
-from src.services.llm_service import generate_estimation
+from src.services.llm_service import stream_estimation
+
+
+def sync_stream_generator(transcript: str):
+    """Convierte el generador asíncrono en síncrono para st.write_stream."""
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    
+    async_gen = stream_estimation(transcript)
+    try:
+        while True:
+            chunk = loop.run_until_complete(anext(async_gen))
+            if isinstance(chunk, str):
+                yield chunk
+            else:
+                # Es el EstimationResponse final con las métricas
+                st.session_state.last_estimation_response = chunk
+    except StopAsyncIteration:
+        pass
+    finally:
+        loop.close()
 
 
 def main():
@@ -35,19 +55,15 @@ def main():
         with st.chat_message("user"):
             st.markdown(prompt)
 
-        # b) Mostramos un indicador de "pensando"
-        with st.spinner("Generando estimación... esto puede tardar un poco."):
+        # b) Creamos la burbuja para el asistente
+        with st.chat_message("assistant"):
             try:
-                # c) Llamamos a nuestro backend. 
-                response = asyncio.run(generate_estimation(transcript=prompt))
+                # c) Pasamos el generador síncrono a st.write_stream
+                # Streamlit irá sacando los tokens e imprimiéndolos con efecto máquina de escribir
+                estimation_text = st.write_stream(sync_stream_generator(prompt))
                 
-                # Extraemos el texto de la estimación del modelo de respuesta
-                estimation_text = response.estimation
-                
-                # d) Añadimos la respuesta del asistente al historial y la mostramos
+                # d) Añadimos la respuesta completa al historial para futuras recargas
                 st.session_state.messages.append({"role": "assistant", "content": estimation_text})
-                with st.chat_message("assistant"):
-                    st.markdown(estimation_text)
                     
             except Exception as e:
                 st.error(f"Ocurrió un error al generar la estimación: {str(e)}")
