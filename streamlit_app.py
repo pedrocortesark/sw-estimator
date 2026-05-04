@@ -4,7 +4,7 @@ import asyncio
 import streamlit as st
 
 # Importamos la función asíncrona de generación de estimaciones del backend
-from src.services.llm_service import stream_estimation
+from src.services.llm_service import stream_estimation, _build_system_prompt
 
 
 def sync_stream_generator(transcript: str):
@@ -33,8 +33,32 @@ def main():
     st.set_page_config(
         page_title="SW Estimator",
         page_icon="🤖",
-        layout="centered"
+        layout="wide"  # Usamos 'wide' para que el sidebar tenga más espacio
     )
+
+    # --- INICIO NIVEL 3: BARRA LATERAL (SIDEBAR) ---
+    with st.sidebar:
+        st.header("⚙️ Contexto CAG")
+        st.info("Este contexto se inyecta de forma invisible en cada petición para guiar al modelo.")
+        
+        with st.expander("Ver System Prompt Activo"):
+            st.code(_build_system_prompt(), language="markdown")
+            
+        st.divider()
+        st.header("📊 Última Ejecución")
+        
+        if "last_estimation_response" in st.session_state:
+            resp = st.session_state.last_estimation_response
+            st.metric("Modelo", resp.model_used)
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric("Input Tokens", resp.usage.input_tokens)
+            with col2:
+                st.metric("Output Tokens", resp.usage.output_tokens)
+            st.metric("Coste Estimado", f"${resp.usage.cost_usd:.6f}")
+        else:
+            st.caption("Aún no se ha generado ninguna estimación en esta sesión.")
+    # --- FIN NIVEL 3 ---
 
     st.title("Generador de Estimaciones de Software")
     st.markdown("Pega aquí la transcripción de tu reunión para obtener una estimación usando CAG.")
