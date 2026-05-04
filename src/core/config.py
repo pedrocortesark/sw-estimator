@@ -16,23 +16,27 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,  # OPENAI_API_KEY == openai_api_key
-        extra="ignore",        # ignora variables del .env que no estén aquí
+        extra="ignore",  # ignora variables del .env que no estén aquí
     )
 
     # --- App ---
     app_env: Literal["development", "production", "test"] = "development"
     log_level: str = "INFO"
 
-    # --- LLM Aggregator ---
-    llm_provider: Literal["openai", "anthropic"] = "openai"
+    # --- LLM Router (LiteLLM) ---
+    # Lista de modelos en orden de prioridad, formato "proveedor/modelo".
+    # El Router intenta el primero; si falla, pasa al siguiente, y así sucesivamente.
+    # Desde .env: LLM_MODELS=["anthropic/claude-opus-4-5","anthropic/claude-haiku-4-5-20251001","openai/gpt-4o-mini"]
+    llm_models: list[str] = [
+        "anthropic/claude-haiku-4-5-20251001",
+        "openai/gpt-4o-mini",
+    ]
 
-    # --- OpenAI ---
+    # --- API Keys ---
+    # LiteLLM las lee automáticamente desde el entorno, pero las declaramos
+    # aquí para que pydantic-settings valide que existen en el .env.
     openai_api_key: str = ""
-    openai_model: str = "gpt-4o-mini"
-
-    # --- Anthropic ---
     anthropic_api_key: str = ""
-    anthropic_model: str = "claude-3-5-haiku-20241022"
 
 
 @lru_cache
