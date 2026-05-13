@@ -156,10 +156,4 @@ def main():
                 st.error(f"No se pudo conectar con la API ({API_BASE}): {e}")
 
 
-if __name__ == "__main__":
-    main()
-
-
-
-if __name__ == "__main__":
-    main()
+main()
