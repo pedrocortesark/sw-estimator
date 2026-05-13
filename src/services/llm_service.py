@@ -10,23 +10,17 @@ LiteLLM Router handles provider selection, retries, and fallback automatically.
 Primary model is tried first; if it fails, the fallback model takes over.
 """
 
-from functools import lru_cache
 from typing import AsyncGenerator
 
 import time
-
-import litellm
-from litellm import Router
 
 from src.context.examples import ESTIMATION_EXAMPLES
 from src.core.config import get_settings
 from src.core.exceptions import ProviderAuthError, ProviderRateLimitError
 from src.core.logging import logger
 from src.schemas.estimation import EstimationResponse, UsageCost
+from src.services.llm_wrapper import complete, stream_complete, get_router
 from src.services.pricing import calculate_cost
-
-# Silencia los logs verbosos de LiteLLM en producción
-litellm.suppress_debug_info = True
 
 
 def _build_system_prompt() -> str:
@@ -81,29 +75,6 @@ Additional rules:
 Meeting transcript provided by the user:"""
 
 
-@lru_cache
-def _get_router() -> Router:
-    """Build and cache the LiteLLM Router (singleton).
-
-    The Router is created once and reused for all requests. It iterates
-    over settings.llm_models in order: the first is the primary, the rest
-    are fallbacks. All share the same alias so LiteLLM handles the cascade.
-    LiteLLM reads ANTHROPIC_API_KEY and OPENAI_API_KEY from the environment.
-    """
-    settings = get_settings()
-    return Router(
-        model_list=[
-            {
-                "model_name": "estimation-model",  # mismo alias = cascada automática
-                "litellm_params": {"model": model},
-            }
-            for model in settings.llm_models
-        ],
-        num_retries=1,
-        timeout=60,
-    )
-
-
 async def generate_estimation(transcript: str) -> EstimationResponse:
     """Generate a software effort estimation from a meeting transcript.
 
@@ -113,43 +84,32 @@ async def generate_estimation(transcript: str) -> EstimationResponse:
     Returns:
         EstimationResponse with the generated estimation, model used, and usage cost.
     """
-    router = _get_router()
     system_prompt = _build_system_prompt()
 
-    # bind() vincula campos de contexto a este logger para toda la llamada.
-    # Todos los logs generados con call_logger llevarán "endpoint" y "mode"
-    # automáticamente, sin tener que repetirlos en cada línea.
     settings = get_settings()
     primary_model = settings.llm_models[0] if settings.llm_models else "unknown"
 
     call_logger = logger.bind(endpoint="/estimate", mode="sync")
-    call_logger.info("llm_call_started", models=_get_router().model_list)
+    call_logger.info("llm_call_started", models=get_router().model_list)
     start = time.time()
 
     try:
-        response = await router.acompletion(
-            model="estimation-model",
+        response = await complete(
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": f"Meeting transcript:\n{transcript}"},
-            ],
+            ]
         )
-    except litellm.AuthenticationError as exc:
+    except (ProviderAuthError, ProviderRateLimitError) as exc:
         latency = round((time.time() - start) * 1000, 1)
-        call_logger.error(
-            "llm_call_failed",
-            error_type="AuthenticationError",
-            latency_ms=latency,
+        error_type = type(exc).__name__
+        log_fn = (
+            call_logger.error
+            if isinstance(exc, ProviderAuthError)
+            else call_logger.warning
         )
-        raise ProviderAuthError() from exc
-    except litellm.RateLimitError as exc:
-        latency = round((time.time() - start) * 1000, 1)
-        call_logger.warning(
-            "llm_call_failed",
-            error_type="RateLimitError",
-            latency_ms=latency,
-        )
-        raise ProviderRateLimitError() from exc
+        log_fn("llm_call_failed", error_type=error_type, latency_ms=latency)
+        raise
 
     latency = round((time.time() - start) * 1000, 1)
     model_used = response.model
@@ -200,40 +160,16 @@ async def stream_estimation(
         Text chunks as they arrive from the model.
         The final yielded item is an EstimationResponse with full metadata.
     """
-    router = _get_router()
     system_prompt = _build_system_prompt()
 
-    # Mismo patrón que generate_estimation, pero con mode="stream" en el contexto.
     call_logger = logger.bind(endpoint="/estimate/stream", mode="stream")
-    call_logger.info("llm_call_started", models=_get_router().model_list)
+    call_logger.info("llm_call_started", models=get_router().model_list)
     start = time.time()
 
-    try:
-        stream = await router.acompletion(
-            model="estimation-model",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Meeting transcript:\n{transcript}"},
-            ],
-            stream=True,
-            stream_options={"include_usage": True},  # activa uso en el último chunk
-        )
-    except litellm.AuthenticationError as exc:
-        latency = round((time.time() - start) * 1000, 1)
-        call_logger.error(
-            "llm_call_failed",
-            error_type="AuthenticationError",
-            latency_ms=latency,
-        )
-        raise ProviderAuthError() from exc
-    except litellm.RateLimitError as exc:
-        latency = round((time.time() - start) * 1000, 1)
-        call_logger.warning(
-            "llm_call_failed",
-            error_type="RateLimitError",
-            latency_ms=latency,
-        )
-        raise ProviderRateLimitError() from exc
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": f"Meeting transcript:\n{transcript}"},
+    ]
 
     full_text = ""
     model_used = ""
@@ -242,7 +178,20 @@ async def stream_estimation(
     output_tokens = 0
     finish_reason = None
 
-    async for chunk in stream:
+    try:
+        chunks = stream_complete(messages=messages)
+    except (ProviderAuthError, ProviderRateLimitError) as exc:
+        latency = round((time.time() - start) * 1000, 1)
+        error_type = type(exc).__name__
+        log_fn = (
+            call_logger.error
+            if isinstance(exc, ProviderAuthError)
+            else call_logger.warning
+        )
+        log_fn("llm_call_failed", error_type=error_type, latency_ms=latency)
+        raise
+
+    async for chunk in chunks:
         # Cada chunk lleva el nombre del modelo
         if chunk.model:
             if not first_model:
