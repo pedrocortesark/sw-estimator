@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     # --- App ---
     app_env: Literal["development", "production", "test"] = "development"
     log_level: str = "INFO"
+    api_base_url: str = "http://localhost:8000"
 
     # --- LLM Router (LiteLLM) ---
     # Lista de modelos en orden de prioridad, formato "proveedor/modelo".

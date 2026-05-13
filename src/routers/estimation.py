@@ -1,9 +1,12 @@
-"""Estimation router — handles POST /api/v1/estimate."""
+"""Estimation router — handles POST /api/v1/estimate and POST /api/v1/estimate/stream."""
+
+import json
 
 from fastapi import APIRouter, status
+from fastapi.responses import StreamingResponse
 
 from src.schemas.estimation import EstimationRequest, EstimationResponse
-from src.services.llm_service import generate_estimation
+from src.services.llm_service import generate_estimation, stream_estimation, _build_system_prompt
 
 router = APIRouter(prefix="/api/v1", tags=["Estimation"])
 
@@ -33,3 +36,37 @@ async def estimate(request: EstimationRequest) -> EstimationResponse:
         transcript=request.transcript,
         provider_override=request.provider,
     )
+
+
+@router.post(
+    "/estimate/stream",
+    status_code=status.HTTP_200_OK,
+    summary="Generate a software effort estimation (streaming)",
+    description=(
+        "Streams the estimation as Server-Sent Events. Text chunks arrive as "
+        "`data: <text>` lines. The final event is `data: [DONE]<json>` containing "
+        "the full EstimationResponse metadata."
+    ),
+)
+async def estimate_stream(request: EstimationRequest) -> StreamingResponse:
+    """POST /api/v1/estimate/stream"""
+
+    async def event_generator():
+        async for chunk in stream_estimation(transcript=request.transcript):
+            if isinstance(chunk, str):
+                yield f"data: {chunk}\n\n"
+            else:
+                yield f"data: [DONE]{chunk.model_dump_json()}\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+@router.get(
+    "/context",
+    status_code=status.HTTP_200_OK,
+    summary="Return the active system prompt",
+    description="Returns the full system prompt injected in every estimation request (CAG context).",
+)
+async def get_context() -> dict:
+    """GET /api/v1/context"""
+    return {"system_prompt": _build_system_prompt()}
