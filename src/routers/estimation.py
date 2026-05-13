@@ -37,8 +37,10 @@ async def estimate(request: EstimationRequest) -> EstimationResponse:
     are handled globally by the exception handlers registered in main.py.
     """
     return await generate_estimation(
-        transcript=request.transcript,
-        provider_override=request.provider,
+        description=request.description,
+        project_type=request.project_type,
+        detail_level=request.detail_level,
+        output_format=request.output_format,
     )
 
 
@@ -56,7 +58,12 @@ async def estimate_stream(request: EstimationRequest) -> StreamingResponse:
     """POST /api/v1/estimate/stream"""
 
     async def event_generator():
-        async for chunk in stream_estimation(transcript=request.transcript):
+        async for chunk in stream_estimation(
+            description=request.description,
+            project_type=request.project_type,
+            detail_level=request.detail_level,
+            output_format=request.output_format,
+        ):
             if isinstance(chunk, str):
                 yield f"data: {chunk}\n\n"
             else:
