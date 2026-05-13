@@ -102,7 +102,9 @@ def main():
             st.caption("Aún no se ha generado ninguna estimación en esta sesión.")
 
     st.title("Generador de Estimaciones de Software")
-    st.markdown("Rellena el formulario para obtener una estimación de esfuerzo usando CAG.")
+    st.markdown(
+        "Rellena el formulario para obtener una estimación de esfuerzo usando CAG."
+    )
 
     # --- FORM ---
     with st.form("estimation_form"):
@@ -132,7 +134,9 @@ def main():
                 format_func=lambda x: OUTPUT_FORMAT_LABELS[x],
             )
 
-        submitted = st.form_submit_button("Generar estimación", use_container_width=True)
+        submitted = st.form_submit_button(
+            "Generar estimación", use_container_width=True
+        )
 
     # --- RESULT ---
     if submitted:
