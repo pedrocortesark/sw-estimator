@@ -19,7 +19,7 @@ async def test_health_response_shape(client: AsyncClient):
 
     assert "status" in body
     assert "env" in body
-    assert "llm_provider" in body
+    assert "llm_models" in body
 
 
 @pytest.mark.asyncio

@@ -17,5 +17,5 @@ async def health_check():
     return {
         "status": "ok",
         "env": settings.app_env,
-        "llm_provider": settings.llm_provider,
+        "llm_models": settings.llm_models,
     }

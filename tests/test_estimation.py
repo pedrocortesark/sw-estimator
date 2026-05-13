@@ -5,18 +5,30 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from httpx import AsyncClient
 
-from src.schemas.estimation import EstimationResponse, UsageCost
-
-# A realistic transcript that passes the min_length=20 validation rule
-VALID_TRANSCRIPT = (
-    "The client wants a web app where users can upload CSV files "
-    "and visualise the data as interactive charts. The backend should "
-    "store the files in S3 and expose a REST API."
+from src.schemas.estimation import (
+    DetailLevel,
+    EstimationResponse,
+    OutputFormat,
+    ProjectType,
+    UsageCost,
 )
+
+# A valid payload that passes all Pydantic validations
+VALID_PAYLOAD = {
+    "description": (
+        "The client wants a web app where users can upload CSV files "
+        "and visualise the data as interactive charts. The backend should "
+        "store the files in S3 and expose a REST API."
+    ),
+    "project_type": ProjectType.WEB_SAAS.value,
+    "detail_level": DetailLevel.MEDIUM.value,
+    "output_format": OutputFormat.PHASES_TABLE.value,
+}
 
 # The fake response our mock will return — deterministic, instant, free
 MOCK_RESPONSE = EstimationResponse(
-    estimation="## Estimation\n\n| Task | Hours |\n|---|---|\n| Backend | 40 |\n\n**Total: 40 hours**",
+    text="## Estimation\n\n| Task | Hours |\n|---|---|\n| Backend | 40 |\n\n**Total: 40 hours**",
+    prompt_version="v1",
     provider_used="anthropic",
     model_used="claude-3-5-haiku-20241022",
     usage=UsageCost(
@@ -29,26 +41,19 @@ MOCK_RESPONSE = EstimationResponse(
 
 
 @pytest.mark.asyncio
-async def test_estimate_returns_200_with_valid_transcript(client: AsyncClient):
-    """A valid transcript must return HTTP 200 and a well-shaped response.
-
-    We mock 'generate_estimation' so the test never calls Anthropic/OpenAI.
-    The mock replaces the function only for the duration of this test,
-    then restores the original automatically.
-    """
+async def test_estimate_returns_200_with_valid_payload(client: AsyncClient):
+    """A valid payload must return HTTP 200 and a well-shaped response."""
     with patch(
         "src.routers.estimation.generate_estimation",
         new_callable=AsyncMock,
         return_value=MOCK_RESPONSE,
     ):
-        response = await client.post(
-            "/api/v1/estimate",
-            json={"transcript": VALID_TRANSCRIPT},
-        )
+        response = await client.post("/api/v1/estimate", json=VALID_PAYLOAD)
 
     assert response.status_code == 200
     body = response.json()
-    assert "estimation" in body
+    assert "text" in body
+    assert "prompt_version" in body
     assert "provider_used" in body
     assert "model_used" in body
 
@@ -61,51 +66,52 @@ async def test_estimate_response_content(client: AsyncClient):
         new_callable=AsyncMock,
         return_value=MOCK_RESPONSE,
     ):
-        response = await client.post(
-            "/api/v1/estimate",
-            json={"transcript": VALID_TRANSCRIPT},
-        )
+        response = await client.post("/api/v1/estimate", json=VALID_PAYLOAD)
 
     body = response.json()
     assert body["provider_used"] == "anthropic"
     assert body["model_used"] == "claude-3-5-haiku-20241022"
-    assert "40 hours" in body["estimation"]
+    assert body["prompt_version"] == "v1"
+    assert "40 hours" in body["text"]
 
 
 @pytest.mark.asyncio
-async def test_estimate_returns_422_when_transcript_missing(client: AsyncClient):
-    """FastAPI must return 422 Unprocessable Entity when 'transcript' is absent.
-
-    This validation is handled automatically by Pydantic — no mock needed
-    because the request never reaches our business logic.
-    """
+async def test_estimate_returns_422_when_body_missing(client: AsyncClient):
+    """FastAPI must return 422 when the request body is empty."""
     response = await client.post("/api/v1/estimate", json={})
     assert response.status_code == 422
 
 
 @pytest.mark.asyncio
-async def test_estimate_returns_422_when_transcript_too_short(client: AsyncClient):
-    """Transcripts shorter than 20 characters must be rejected with 422."""
-    response = await client.post(
-        "/api/v1/estimate",
-        json={"transcript": "too short"},
-    )
+async def test_estimate_returns_422_when_description_too_short(client: AsyncClient):
+    """Descriptions shorter than 20 characters must be rejected with 422."""
+    payload = {**VALID_PAYLOAD, "description": "too short"}
+    response = await client.post("/api/v1/estimate", json=payload)
     assert response.status_code == 422
 
 
 @pytest.mark.asyncio
-async def test_estimate_returns_400_for_unknown_provider(client: AsyncClient):
-    """Requesting an unsupported provider name must return HTTP 400.
+async def test_estimate_returns_422_with_invalid_project_type(client: AsyncClient):
+    """An unknown project_type enum value must return 422."""
+    payload = {**VALID_PAYLOAD, "project_type": "blockchain_nft"}
+    response = await client.post("/api/v1/estimate", json=payload)
+    assert response.status_code == 422
 
-    The service raises UnknownProviderError, which is caught by the global
-    exception handler in main.py and converted to a 400 response.
-    Here we let the real service run — the error is triggered before any LLM call.
-    """
-    response = await client.post(
-        "/api/v1/estimate",
-        json={"transcript": VALID_TRANSCRIPT, "provider": "grok"},
-    )
-    assert response.status_code == 400
+
+@pytest.mark.asyncio
+async def test_estimate_returns_422_with_invalid_detail_level(client: AsyncClient):
+    """An unknown detail_level enum value must return 422."""
+    payload = {**VALID_PAYLOAD, "detail_level": "ultra"}
+    response = await client.post("/api/v1/estimate", json=payload)
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_estimate_returns_422_with_invalid_output_format(client: AsyncClient):
+    """An unknown output_format enum value must return 422."""
+    payload = {**VALID_PAYLOAD, "output_format": "powerpoint"}
+    response = await client.post("/api/v1/estimate", json=payload)
+    assert response.status_code == 422
 
 
 @pytest.mark.asyncio
@@ -116,9 +122,7 @@ async def test_estimate_returns_500_on_unexpected_error(client: AsyncClient):
         new_callable=AsyncMock,
         side_effect=RuntimeError("LLM network timeout"),
     ):
-        response = await client.post(
-            "/api/v1/estimate",
-            json={"transcript": VALID_TRANSCRIPT},
-        )
+        response = await client.post("/api/v1/estimate", json=VALID_PAYLOAD)
 
     assert response.status_code == 500
+
