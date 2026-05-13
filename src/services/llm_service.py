@@ -13,6 +13,8 @@ Primary model is tried first; if it fails, the fallback model takes over.
 from functools import lru_cache
 from typing import AsyncGenerator
 
+import time
+
 import litellm
 from litellm import Router
 
@@ -114,7 +116,15 @@ async def generate_estimation(transcript: str) -> EstimationResponse:
     router = _get_router()
     system_prompt = _build_system_prompt()
 
-    logger.info("Generating estimation via LiteLLM Router")
+    # bind() vincula campos de contexto a este logger para toda la llamada.
+    # Todos los logs generados con call_logger llevarán "endpoint" y "mode"
+    # automáticamente, sin tener que repetirlos en cada línea.
+    settings = get_settings()
+    primary_model = settings.llm_models[0] if settings.llm_models else "unknown"
+
+    call_logger = logger.bind(endpoint="/estimate", mode="sync")
+    call_logger.info("llm_call_started", models=_get_router().model_list)
+    start = time.time()
 
     try:
         response = await router.acompletion(
@@ -125,21 +135,47 @@ async def generate_estimation(transcript: str) -> EstimationResponse:
             ],
         )
     except litellm.AuthenticationError as exc:
-        logger.error("Authentication failed")
+        latency = round((time.time() - start) * 1000, 1)
+        call_logger.error(
+            "llm_call_failed",
+            error_type="AuthenticationError",
+            latency_ms=latency,
+        )
         raise ProviderAuthError() from exc
     except litellm.RateLimitError as exc:
-        logger.warning("Rate limit hit")
+        latency = round((time.time() - start) * 1000, 1)
+        call_logger.warning(
+            "llm_call_failed",
+            error_type="RateLimitError",
+            latency_ms=latency,
+        )
         raise ProviderRateLimitError() from exc
 
+    latency = round((time.time() - start) * 1000, 1)
     model_used = response.model
     input_tokens = response.usage.prompt_tokens
     output_tokens = response.usage.completion_tokens
     cost_usd = calculate_cost(model_used, input_tokens, output_tokens)
+    # LiteLLM expone si la respuesta vino de caché en _hidden_params.
+    cache_hit = getattr(response, "_hidden_params", {}).get("cache_hit", False)
 
-    logger.info(
-        f"Estimation generated | model={model_used}"
-        f" | input_tokens={input_tokens} | output_tokens={output_tokens}"
-        f" | cost_usd={cost_usd:.6f}"
+    # Si LiteLLM usó un modelo distinto al primario, hubo fallback automático.
+    if primary_model not in model_used:
+        call_logger.warning(
+            "fallback_triggered",
+            original_provider=primary_model,
+            fallback_provider=model_used,
+        )
+
+    call_logger.info(
+        "llm_call_completed",
+        model=model_used,
+        tokens_in=input_tokens,
+        tokens_out=output_tokens,
+        latency_ms=latency,
+        cost_usd=round(cost_usd, 6),
+        finish_reason=response.choices[0].finish_reason,
+        cache_hit=cache_hit,
     )
 
     return EstimationResponse(
@@ -167,7 +203,10 @@ async def stream_estimation(
     router = _get_router()
     system_prompt = _build_system_prompt()
 
-    logger.info("Starting estimation stream via LiteLLM Router")
+    # Mismo patrón que generate_estimation, pero con mode="stream" en el contexto.
+    call_logger = logger.bind(endpoint="/estimate/stream", mode="stream")
+    call_logger.info("llm_call_started", models=_get_router().model_list)
+    start = time.time()
 
     try:
         stream = await router.acompletion(
@@ -180,26 +219,47 @@ async def stream_estimation(
             stream_options={"include_usage": True},  # activa uso en el último chunk
         )
     except litellm.AuthenticationError as exc:
-        logger.error("Authentication failed during stream")
+        latency = round((time.time() - start) * 1000, 1)
+        call_logger.error(
+            "llm_call_failed",
+            error_type="AuthenticationError",
+            latency_ms=latency,
+        )
         raise ProviderAuthError() from exc
     except litellm.RateLimitError as exc:
-        logger.warning("Rate limit hit during stream")
+        latency = round((time.time() - start) * 1000, 1)
+        call_logger.warning(
+            "llm_call_failed",
+            error_type="RateLimitError",
+            latency_ms=latency,
+        )
         raise ProviderRateLimitError() from exc
 
     full_text = ""
     model_used = ""
+    first_model = ""
     input_tokens = 0
     output_tokens = 0
+    finish_reason = None
 
     async for chunk in stream:
         # Cada chunk lleva el nombre del modelo
         if chunk.model:
+            if not first_model:
+                # Guardamos el modelo del primer chunk para detectar fallback.
+                # Si a mitad del stream LiteLLM cambia de proveedor, model_used
+                # será distinto de first_model al final.
+                first_model = chunk.model
             model_used = chunk.model
 
         delta = chunk.choices[0].delta.content if chunk.choices else None
         if delta:
             full_text += delta
             yield delta
+
+        # finish_reason llega en el penúltimo chunk (antes del chunk de usage)
+        if chunk.choices and chunk.choices[0].finish_reason:
+            finish_reason = chunk.choices[0].finish_reason
 
         # El último chunk (con stream_options include_usage) trae el uso
         usage = getattr(chunk, "usage", None)
@@ -208,10 +268,24 @@ async def stream_estimation(
             output_tokens = usage.completion_tokens or 0
 
     cost_usd = calculate_cost(model_used, input_tokens, output_tokens)
-    logger.info(
-        f"Estimation stream finished | model={model_used}"
-        f" | input_tokens={input_tokens} | output_tokens={output_tokens}"
-        f" | cost_usd={cost_usd:.6f}"
+    latency = round((time.time() - start) * 1000, 1)
+
+    # Si LiteLLM hizo fallback a otro modelo, lo registramos explícitamente.
+    if first_model and model_used and first_model != model_used:
+        call_logger.warning(
+            "fallback_triggered",
+            original_provider=first_model,
+            fallback_provider=model_used,
+        )
+
+    call_logger.info(
+        "llm_call_completed",
+        model=model_used,
+        tokens_in=input_tokens,
+        tokens_out=output_tokens,
+        latency_ms=latency,
+        cost_usd=round(cost_usd, 6),
+        finish_reason=finish_reason,
     )
 
     yield EstimationResponse(

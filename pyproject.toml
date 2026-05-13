@@ -7,10 +7,10 @@ dependencies = [
     "anthropic>=0.97.0",
     "fastapi>=0.136.1",
     "litellm>=1.83.0",
-    "loguru>=0.7.3",
     "openai>=2.33.0",
     "pydantic-settings>=2.14.0",
     "streamlit>=1.57.0",
+    "structlog>=25.5.0",
     "uvicorn[standard]>=0.46.0",
 ]
 
