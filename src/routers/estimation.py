@@ -6,7 +6,11 @@ from fastapi import APIRouter, status
 from fastapi.responses import StreamingResponse
 
 from src.schemas.estimation import EstimationRequest, EstimationResponse
-from src.services.llm_service import generate_estimation, stream_estimation, _build_system_prompt
+from src.services.llm_service import (
+    generate_estimation,
+    stream_estimation,
+    _build_system_prompt,
+)
 
 router = APIRouter(prefix="/api/v1", tags=["Estimation"])
 

@@ -59,7 +59,9 @@ def main():
     # --- SIDEBAR ---
     with st.sidebar:
         st.header("⚙️ Contexto CAG")
-        st.info("Este contexto se inyecta de forma invisible en cada petición para guiar al modelo.")
+        st.info(
+            "Este contexto se inyecta de forma invisible en cada petición para guiar al modelo."
+        )
 
         with st.expander("Ver System Prompt Activo"):
             st.code(_get_system_prompt(), language="markdown")
@@ -80,7 +82,9 @@ def main():
             st.caption("Aún no se ha generado ninguna estimación en esta sesión.")
 
     st.title("Generador de Estimaciones de Software")
-    st.markdown("Pega aquí la transcripción de tu reunión para obtener una estimación usando CAG.")
+    st.markdown(
+        "Pega aquí la transcripción de tu reunión para obtener una estimación usando CAG."
+    )
 
     if "messages" not in st.session_state:
         st.session_state.messages = []
