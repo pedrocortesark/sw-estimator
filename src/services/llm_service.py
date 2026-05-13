@@ -1,29 +1,25 @@
 """LLM aggregator service — the core of the CAG architecture.
 
 This module is responsible for:
-1. Selecting the correct LLM provider (OpenAI or Anthropic) based on config
-   or a per-request override.
-2. Building the system prompt with the static few-shot examples injected
+1. Building the system prompt with the static few-shot examples injected
    (Context-Augmented Generation).
-3. Delegating the completion to the chosen provider and returning a
-   structured EstimationResponse.
+2. Routing requests through LiteLLM Router with automatic fallback.
+3. Returning a structured EstimationResponse.
+
+LiteLLM Router handles provider selection, retries, and fallback automatically.
+Primary model is tried first; if it fails, the fallback model takes over.
 """
 
-import anthropic
-import openai
+from typing import AsyncGenerator
+
+import time
 
 from src.context.examples import ESTIMATION_EXAMPLES
 from src.core.config import get_settings
-from src.core.exceptions import (
-    ProviderAuthError,
-    ProviderRateLimitError,
-    UnknownProviderError,
-)
+from src.core.exceptions import ProviderAuthError, ProviderRateLimitError
 from src.core.logging import logger
 from src.schemas.estimation import EstimationResponse, UsageCost
-from src.services.anthropic_provider import AnthropicProvider
-from src.services.base_llm import BaseLLMProvider
-from src.services.openai_provider import OpenAIProvider
+from src.services.llm_wrapper import complete, stream_complete, get_router
 from src.services.pricing import calculate_cost
 
 
@@ -79,148 +75,176 @@ Additional rules:
 Meeting transcript provided by the user:"""
 
 
-def _get_provider(provider_name: str) -> BaseLLMProvider:
-    """Instantiate and return the correct provider.
-
-    Args:
-        provider_name: 'openai' or 'anthropic'
-
-    Raises:
-        ValueError: if an unsupported provider name is given.
-    """
-    if provider_name == "openai":
-        return OpenAIProvider()
-    if provider_name == "anthropic":
-        return AnthropicProvider()
-    raise UnknownProviderError(
-        f"Unsupported LLM provider: '{provider_name}'. "
-        "Valid options are: 'openai', 'anthropic'."
-    )
-
-
-async def generate_estimation(
-    transcript: str,
-    provider_override: str | None = None,
-) -> EstimationResponse:
+async def generate_estimation(transcript: str) -> EstimationResponse:
     """Generate a software effort estimation from a meeting transcript.
 
     Args:
-        transcript:        Raw text of the meeting transcription.
-        provider_override: Optional provider name to use instead of the one
-                           configured in Settings. Useful for A/B testing.
+        transcript: Raw text of the meeting transcription.
 
     Returns:
-        EstimationResponse with the generated estimation, provider, and model used.
+        EstimationResponse with the generated estimation, model used, and usage cost.
     """
-    settings = get_settings()
-    provider_name = provider_override or settings.llm_provider
-
-    logger.info(f"Generating estimation | provider={provider_name}")
-
-    provider = _get_provider(provider_name)
     system_prompt = _build_system_prompt()
 
-    try:
-        estimation_text, model_used, provider_usage = await provider.complete(
-            system_prompt=system_prompt,
-            user_message=f"Meeting transcript:\n{transcript}",
-        )
-    except (openai.RateLimitError, anthropic.RateLimitError) as exc:
-        logger.warning(f"Rate limit hit | provider={provider_name}")
-        raise ProviderRateLimitError() from exc
-    except (openai.AuthenticationError, anthropic.AuthenticationStatusError) as exc:
-        logger.error(f"Authentication failed | provider={provider_name}")
-        raise ProviderAuthError() from exc
+    settings = get_settings()
+    primary_model = settings.llm_models[0] if settings.llm_models else "unknown"
 
-    cost_usd = calculate_cost(
-        model_used, provider_usage.input_tokens, provider_usage.output_tokens
-    )
-    logger.info(
-        f"Estimation generated successfully"
-        f" | provider={provider_name}"
-        f" | model={model_used}"
-        f" | input_tokens={provider_usage.input_tokens}"
-        f" | output_tokens={provider_usage.output_tokens}"
-        f" | cost_usd={cost_usd:.6f}"
+    call_logger = logger.bind(endpoint="/estimate", mode="sync")
+    call_logger.info("llm_call_started", models=get_router().model_list)
+    start = time.time()
+
+    try:
+        response = await complete(
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"Meeting transcript:\n{transcript}"},
+            ]
+        )
+    except (ProviderAuthError, ProviderRateLimitError) as exc:
+        latency = round((time.time() - start) * 1000, 1)
+        error_type = type(exc).__name__
+        log_fn = (
+            call_logger.error
+            if isinstance(exc, ProviderAuthError)
+            else call_logger.warning
+        )
+        log_fn("llm_call_failed", error_type=error_type, latency_ms=latency)
+        raise
+
+    latency = round((time.time() - start) * 1000, 1)
+    model_used = response.model
+    input_tokens = response.usage.prompt_tokens
+    output_tokens = response.usage.completion_tokens
+    cost_usd = calculate_cost(model_used, input_tokens, output_tokens)
+    # LiteLLM expone si la respuesta vino de caché en _hidden_params.
+    cache_hit = getattr(response, "_hidden_params", {}).get("cache_hit", False)
+
+    # Si LiteLLM usó un modelo distinto al primario, hubo fallback automático.
+    if primary_model not in model_used:
+        call_logger.warning(
+            "fallback_triggered",
+            original_provider=primary_model,
+            fallback_provider=model_used,
+        )
+
+    call_logger.info(
+        "llm_call_completed",
+        model=model_used,
+        tokens_in=input_tokens,
+        tokens_out=output_tokens,
+        latency_ms=latency,
+        cost_usd=round(cost_usd, 6),
+        finish_reason=response.choices[0].finish_reason,
+        cache_hit=cache_hit,
     )
 
     return EstimationResponse(
-        estimation=estimation_text,
-        provider_used=provider_name,
+        estimation=response.choices[0].message.content,
+        provider_used=model_used.split("/")[0] if "/" in model_used else model_used,
         model_used=model_used,
         usage=UsageCost(
-            input_tokens=provider_usage.input_tokens,
-            output_tokens=provider_usage.output_tokens,
-            total_tokens=provider_usage.input_tokens + provider_usage.output_tokens,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            total_tokens=input_tokens + output_tokens,
             cost_usd=cost_usd,
         ),
     )
 
-from typing import AsyncGenerator
 
 async def stream_estimation(
     transcript: str,
-    provider_override: str | None = None,
 ) -> AsyncGenerator[str | EstimationResponse, None]:
     """Generate a software effort estimation using streaming.
 
     Yields:
-        A sequence of text chunks.
-        The final yielded item is an EstimationResponse object containing
-        the full text, model used, and usage cost details.
+        Text chunks as they arrive from the model.
+        The final yielded item is an EstimationResponse with full metadata.
     """
-    settings = get_settings()
-    provider_name = provider_override or settings.llm_provider
-
-    logger.info(f"Starting estimation stream | provider={provider_name}")
-
-    provider = _get_provider(provider_name)
     system_prompt = _build_system_prompt()
 
-    try:
-        stream = provider.stream_complete(
-            system_prompt=system_prompt,
-            user_message=f"Meeting transcript:\n{transcript}",
-        )
-        
-        full_text = ""
-        model_used = ""
-        provider_usage = None
-        
-        async for chunk in stream:
-            if isinstance(chunk, str):
-                full_text += chunk
-                yield chunk
-            elif isinstance(chunk, dict):
-                model_used = chunk.get("model", "")
-                provider_usage = chunk.get("usage")
-                
-    except (openai.RateLimitError, anthropic.RateLimitError) as exc:
-        logger.warning(f"Rate limit hit during stream | provider={provider_name}")
-        raise ProviderRateLimitError() from exc
-    except (openai.AuthenticationError, anthropic.AuthenticationStatusError) as exc:
-        logger.error(f"Authentication failed during stream | provider={provider_name}")
-        raise ProviderAuthError() from exc
+    call_logger = logger.bind(endpoint="/estimate/stream", mode="stream")
+    call_logger.info("llm_call_started", models=get_router().model_list)
+    start = time.time()
 
-    if provider_usage and model_used:
-        cost_usd = calculate_cost(
-            model_used, provider_usage.input_tokens, provider_usage.output_tokens
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": f"Meeting transcript:\n{transcript}"},
+    ]
+
+    full_text = ""
+    model_used = ""
+    first_model = ""
+    input_tokens = 0
+    output_tokens = 0
+    finish_reason = None
+
+    try:
+        chunks = stream_complete(messages=messages)
+    except (ProviderAuthError, ProviderRateLimitError) as exc:
+        latency = round((time.time() - start) * 1000, 1)
+        error_type = type(exc).__name__
+        log_fn = (
+            call_logger.error
+            if isinstance(exc, ProviderAuthError)
+            else call_logger.warning
         )
-        logger.info(
-            f"Estimation stream finished successfully"
-            f" | provider={provider_name}"
-            f" | model={model_used}"
-            f" | cost_usd={cost_usd:.6f}"
+        log_fn("llm_call_failed", error_type=error_type, latency_ms=latency)
+        raise
+
+    async for chunk in chunks:
+        # Cada chunk lleva el nombre del modelo
+        if chunk.model:
+            if not first_model:
+                # Guardamos el modelo del primer chunk para detectar fallback.
+                # Si a mitad del stream LiteLLM cambia de proveedor, model_used
+                # será distinto de first_model al final.
+                first_model = chunk.model
+            model_used = chunk.model
+
+        delta = chunk.choices[0].delta.content if chunk.choices else None
+        if delta:
+            full_text += delta
+            yield delta
+
+        # finish_reason llega en el penúltimo chunk (antes del chunk de usage)
+        if chunk.choices and chunk.choices[0].finish_reason:
+            finish_reason = chunk.choices[0].finish_reason
+
+        # El último chunk (con stream_options include_usage) trae el uso
+        usage = getattr(chunk, "usage", None)
+        if usage:
+            input_tokens = usage.prompt_tokens or 0
+            output_tokens = usage.completion_tokens or 0
+
+    cost_usd = calculate_cost(model_used, input_tokens, output_tokens)
+    latency = round((time.time() - start) * 1000, 1)
+
+    # Si LiteLLM hizo fallback a otro modelo, lo registramos explícitamente.
+    if first_model and model_used and first_model != model_used:
+        call_logger.warning(
+            "fallback_triggered",
+            original_provider=first_model,
+            fallback_provider=model_used,
         )
-        
-        yield EstimationResponse(
-            estimation=full_text,
-            provider_used=provider_name,
-            model_used=model_used,
-            usage=UsageCost(
-                input_tokens=provider_usage.input_tokens,
-                output_tokens=provider_usage.output_tokens,
-                total_tokens=provider_usage.input_tokens + provider_usage.output_tokens,
-                cost_usd=cost_usd,
-            ),
-        )
+
+    call_logger.info(
+        "llm_call_completed",
+        model=model_used,
+        tokens_in=input_tokens,
+        tokens_out=output_tokens,
+        latency_ms=latency,
+        cost_usd=round(cost_usd, 6),
+        finish_reason=finish_reason,
+    )
+
+    yield EstimationResponse(
+        estimation=full_text,
+        provider_used=model_used.split("/")[0] if "/" in model_used else model_used,
+        model_used=model_used,
+        usage=UsageCost(
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            total_tokens=input_tokens + output_tokens,
+            cost_usd=cost_usd,
+        ),
+    )

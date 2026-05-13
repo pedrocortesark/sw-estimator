@@ -4,7 +4,7 @@ from fastapi import FastAPI
 
 from src.core.config import get_settings
 from src.core.exceptions import setup_exception_handlers
-from src.core.logging import logger, setup_logging
+from src.core.logging import logger, configure_logging
 from src.routers import health, estimation
 
 
@@ -19,10 +19,12 @@ async def lifespan(app: FastAPI):
     DB connections, etc.) and clean them up on exit.
     """
     # --- Startup ---
-    setup_logging()
+    configure_logging()
     settings = get_settings()
     logger.info(
-        f"Starting sw-estimator | env={settings.app_env} | provider={settings.llm_provider}"
+        "app_started",
+        env=settings.app_env,
+        log_level=settings.log_level,
     )
 
     yield  # <-- FastAPI serves requests here
