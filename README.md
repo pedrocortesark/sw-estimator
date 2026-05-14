@@ -120,6 +120,15 @@ tests/
 
 ---
 
+## Demo
+
+![SW Estimator — interfaz Streamlit](docs/assets/sw-estimator.png)
+
+> Interfaz Streamlit: formulario con tipo de proyecto, nivel de detalle y formato de salida.  
+> El panel lateral muestra el contexto CAG inyectado y el system prompt activo.
+
+---
+
 ## Arquitectura de prompts
 
 Los prompts se renderizan con Jinja2 desde `src/prompts/estimation/<version>/`:
