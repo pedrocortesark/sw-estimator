@@ -64,7 +64,7 @@ def http_stream_generator(payload: dict):
                     metadata = json.loads(data[6:])
                     st.session_state.last_estimation_response = metadata
                 else:
-                    yield data
+                    yield data if data else "\n"
 
 
 def main():
@@ -153,7 +153,12 @@ def main():
             st.divider()
             st.subheader("Estimación generada")
             try:
-                st.write_stream(http_stream_generator(payload))
+                placeholder = st.empty()
+                accumulated = ""
+                for chunk in http_stream_generator(payload):
+                    accumulated += chunk
+                    placeholder.markdown(accumulated)
+                placeholder.markdown(accumulated)
             except httpx.HTTPStatusError as e:
                 st.error(f"Error HTTP {e.response.status_code}: {e.response.text}")
             except httpx.RequestError as e:
