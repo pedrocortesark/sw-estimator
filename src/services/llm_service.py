@@ -29,11 +29,15 @@ from src.services.pricing import calculate_cost
 PROMPT_VERSION = "v1"
 
 
-async def generate_estimation(request: EstimationRequest) -> EstimationResponse:
+async def generate_estimation(
+    request: EstimationRequest,
+    prompt_version: str = PROMPT_VERSION,
+) -> EstimationResponse:
     """Generate a software effort estimation from a project description.
 
     Args:
-        request: Validated estimation request containing description and options.
+        request:        Validated estimation request containing description and options.
+        prompt_version: Template version to use (default: PROMPT_VERSION constant).
 
     Returns:
         EstimationResponse with the generated estimation, model used, and usage cost.
@@ -41,7 +45,9 @@ async def generate_estimation(request: EstimationRequest) -> EstimationResponse:
     settings = get_settings()
     primary_model = settings.llm_models[0] if settings.llm_models else "unknown"
 
-    system_prompt, user_message = render_estimation_prompt(request, model=primary_model)
+    system_prompt, user_message = render_estimation_prompt(
+        request, version=prompt_version, model=primary_model
+    )
 
     call_logger = logger.bind(endpoint="/estimate", mode="sync")
     call_logger.info("llm_call_started", models=get_router().model_list)
@@ -94,7 +100,7 @@ async def generate_estimation(request: EstimationRequest) -> EstimationResponse:
 
     return EstimationResponse(
         text=response.choices[0].message.content,
-        prompt_version=PROMPT_VERSION,
+        prompt_version=prompt_version,
         provider_used=model_used.split("/")[0] if "/" in model_used else model_used,
         model_used=model_used,
         usage=UsageCost(
@@ -108,6 +114,7 @@ async def generate_estimation(request: EstimationRequest) -> EstimationResponse:
 
 async def stream_estimation(
     request: EstimationRequest,
+    prompt_version: str = PROMPT_VERSION,
 ) -> AsyncGenerator[str | EstimationResponse, None]:
     """Generate a software effort estimation using streaming.
 
@@ -118,7 +125,9 @@ async def stream_estimation(
     settings = get_settings()
     primary_model = settings.llm_models[0] if settings.llm_models else "unknown"
 
-    system_prompt, user_message = render_estimation_prompt(request, model=primary_model)
+    system_prompt, user_message = render_estimation_prompt(
+        request, version=prompt_version, model=primary_model
+    )
 
     call_logger = logger.bind(endpoint="/estimate/stream", mode="stream")
     call_logger.info("llm_call_started", models=get_router().model_list)
@@ -197,7 +206,7 @@ async def stream_estimation(
 
     yield EstimationResponse(
         text=full_text,
-        prompt_version=PROMPT_VERSION,
+        prompt_version=prompt_version,
         provider_used=model_used.split("/")[0] if "/" in model_used else model_used,
         model_used=model_used,
         usage=UsageCost(
