@@ -7,7 +7,12 @@ They validate the rendered text of system.j2 and user.j2 directly.
 import pytest
 
 from src.prompts.loader import render_estimation_prompt
-from src.schemas.estimation import DetailLevel, EstimationRequest, OutputFormat, ProjectType
+from src.schemas.estimation import (
+    DetailLevel,
+    EstimationRequest,
+    OutputFormat,
+    ProjectType,
+)
 
 # ---------------------------------------------------------------------------
 # Shared fixture
@@ -39,6 +44,7 @@ def _req(
 # ---------------------------------------------------------------------------
 # Test 1 — description appears inside the project_description block
 # ---------------------------------------------------------------------------
+
 
 def test_user_description_inside_xml_project_description_block():
     """With XML style the description must be wrapped in <project_description>."""
@@ -74,6 +80,7 @@ def test_user_description_not_leaked_outside_block_in_xml():
 # Test 2 — output_format conditional: phases_table vs narrative
 # ---------------------------------------------------------------------------
 
+
 def test_system_phases_table_keyword_present_when_phases_table():
     """phases_table format must inject instructions about project phase breakdown."""
     system, _ = _req(output_format=OutputFormat.PHASES_TABLE)
@@ -101,6 +108,7 @@ def test_system_narrative_keyword_absent_when_phases_table():
 # ---------------------------------------------------------------------------
 # Test 3 — detail_level conditional: detailed assumptions vs summary
 # ---------------------------------------------------------------------------
+
 
 def test_system_detailed_includes_assumptions_instruction():
     """detail_level=detailed must instruct the model to list technical assumptions."""

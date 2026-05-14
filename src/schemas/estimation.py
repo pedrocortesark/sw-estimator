@@ -9,12 +9,8 @@ class ReferenceProject(BaseModel):
     """A past project used as calibration context for the estimation."""
 
     name: str = Field(description="Short name or codename of the reference project.")
-    description: str = Field(
-        description="What the project did in 1-2 sentences."
-    )
-    total_hours: int = Field(
-        description="Actual hours delivered on that project."
-    )
+    description: str = Field(description="What the project did in 1-2 sentences.")
+    total_hours: int = Field(description="Actual hours delivered on that project.")
     notes: str | None = Field(
         default=None,
         description="Optional lessons learned or caveats that affect the comparison.",

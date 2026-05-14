@@ -56,6 +56,7 @@ def _user(reference_projects=None, prompt_style="xml") -> str:
 # Block presence / absence
 # ---------------------------------------------------------------------------
 
+
 def test_reference_projects_block_absent_when_none():
     """No reference_projects → the block must not appear in the user prompt."""
     user = _user(reference_projects=None)
@@ -72,6 +73,7 @@ def test_reference_projects_block_present_when_provided():
 # ---------------------------------------------------------------------------
 # Content correctness
 # ---------------------------------------------------------------------------
+
 
 def test_reference_project_names_appear_in_user_prompt():
     """Both project names must be listed."""
@@ -99,13 +101,14 @@ def test_reference_project_notes_omitted_when_none():
     # Split on the Beta Inventory line and verify no Note: follows immediately
     beta_pos = user.index("Beta Inventory")
     # The next project separator or end of block should come before any "Note:"
-    snippet = user[beta_pos: beta_pos + 200]
+    snippet = user[beta_pos : beta_pos + 200]
     assert "Note:" not in snippet
 
 
 # ---------------------------------------------------------------------------
 # Style-aware delimiters
 # ---------------------------------------------------------------------------
+
 
 def test_reference_projects_xml_delimiters():
     """XML style must wrap the block in <reference_projects> tags."""
@@ -125,11 +128,10 @@ def test_reference_projects_markdown_header():
 # Schema validation — ReferenceProject
 # ---------------------------------------------------------------------------
 
+
 def test_reference_project_notes_field_is_optional():
     """notes must be optional at the schema level."""
-    rp = ReferenceProject(
-        name="X", description="Test project.", total_hours=100
-    )
+    rp = ReferenceProject(name="X", description="Test project.", total_hours=100)
     assert rp.notes is None
 
 

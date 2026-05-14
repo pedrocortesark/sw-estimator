@@ -77,10 +77,10 @@ def render_estimation_prompt(
 
     template_dir = _PROMPTS_DIR / "estimation" / version
     if not template_dir.exists():
-        available = sorted(p.name for p in (_PROMPTS_DIR / "estimation").iterdir() if p.is_dir())
-        raise ValueError(
-            f"Unknown prompt version {version!r}. Available: {available}"
+        available = sorted(
+            p.name for p in (_PROMPTS_DIR / "estimation").iterdir() if p.is_dir()
         )
+        raise ValueError(f"Unknown prompt version {version!r}. Available: {available}")
     env = Environment(
         loader=FileSystemLoader(str(template_dir)),
         undefined=StrictUndefined,
@@ -94,9 +94,9 @@ def render_estimation_prompt(
         "output_format": request.output_format.value,
         "description": request.description,
         "prompt_style": resolved_style,
-        "reference_projects": [
-            rp.model_dump() for rp in request.reference_projects
-        ] if request.reference_projects else [],
+        "reference_projects": [rp.model_dump() for rp in request.reference_projects]
+        if request.reference_projects
+        else [],
     }
 
     system = env.get_template("system.j2").render(**context)

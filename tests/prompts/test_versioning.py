@@ -11,7 +11,12 @@ Verifies that:
 import pytest
 
 from src.prompts.loader import render_estimation_prompt
-from src.schemas.estimation import DetailLevel, EstimationRequest, OutputFormat, ProjectType
+from src.schemas.estimation import (
+    DetailLevel,
+    EstimationRequest,
+    OutputFormat,
+    ProjectType,
+)
 
 # ---------------------------------------------------------------------------
 # Shared helpers
@@ -33,6 +38,7 @@ def _system(version: str) -> str:
 # ---------------------------------------------------------------------------
 # Template content differences between versions
 # ---------------------------------------------------------------------------
+
 
 def test_v2_system_contains_chain_of_thought_instruction():
     """v2 must include the chain-of-thought block absent from v1."""
@@ -65,6 +71,7 @@ def test_v1_and_v2_produce_different_systems():
 # Unknown version raises ValueError
 # ---------------------------------------------------------------------------
 
+
 def test_unknown_version_raises_value_error():
     with pytest.raises(ValueError, match="Unknown prompt version"):
         render_estimation_prompt(_REQ, version="v99")
@@ -79,6 +86,7 @@ def test_unknown_version_error_message_lists_available():
 # ---------------------------------------------------------------------------
 # HTTP endpoint accepts ?prompt_version query param
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_estimate_endpoint_accepts_prompt_version_v1(client):
