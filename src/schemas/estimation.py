@@ -1,6 +1,24 @@
+from __future__ import annotations
+
 from enum import Enum
 
 from pydantic import BaseModel, Field
+
+
+class ReferenceProject(BaseModel):
+    """A past project used as calibration context for the estimation."""
+
+    name: str = Field(description="Short name or codename of the reference project.")
+    description: str = Field(
+        description="What the project did in 1-2 sentences."
+    )
+    total_hours: int = Field(
+        description="Actual hours delivered on that project."
+    )
+    notes: str | None = Field(
+        default=None,
+        description="Optional lessons learned or caveats that affect the comparison.",
+    )
 
 
 class ProjectType(str, Enum):
@@ -42,6 +60,23 @@ class EstimationRequest(BaseModel):
     )
     output_format: OutputFormat = Field(
         description="The structure of the estimation output.",
+    )
+    reference_projects: list[ReferenceProject] | None = Field(
+        default=None,
+        description=(
+            "Optional list of past similar projects used as calibration anchors. "
+            "When provided, the model will use them to ground its estimates."
+        ),
+        examples=[
+            [
+                {
+                    "name": "Acme CRM",
+                    "description": "Internal CRM for a 50-person sales team.",
+                    "total_hours": 320,
+                    "notes": "Heavy custom reporting added 40 h.",
+                }
+            ]
+        ],
     )
 
 
