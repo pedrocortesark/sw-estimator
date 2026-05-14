@@ -36,12 +36,7 @@ async def estimate(request: EstimationRequest) -> EstimationResponse:
     Domain exceptions (ProviderRateLimitError, ProviderAuthError, UnknownProviderError)
     are handled globally by the exception handlers registered in main.py.
     """
-    return await generate_estimation(
-        description=request.description,
-        project_type=request.project_type,
-        detail_level=request.detail_level,
-        output_format=request.output_format,
-    )
+    return await generate_estimation(request)
 
 
 @router.post(
@@ -58,12 +53,7 @@ async def estimate_stream(request: EstimationRequest) -> StreamingResponse:
     """POST /api/v1/estimate/stream"""
 
     async def event_generator():
-        async for chunk in stream_estimation(
-            description=request.description,
-            project_type=request.project_type,
-            detail_level=request.detail_level,
-            output_format=request.output_format,
-        ):
+        async for chunk in stream_estimation(request):
             if isinstance(chunk, str):
                 yield f"data: {chunk}\n\n"
             else:

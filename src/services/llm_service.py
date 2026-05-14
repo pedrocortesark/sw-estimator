@@ -18,29 +18,22 @@ from src.core.config import get_settings
 from src.core.exceptions import ProviderAuthError, ProviderRateLimitError
 from src.core.logging import logger
 from src.prompts.loader import render_estimation_prompt
-from src.schemas.estimation import DetailLevel, EstimationRequest, EstimationResponse, OutputFormat, ProjectType, UsageCost
+from src.schemas.estimation import (
+    EstimationRequest,
+    EstimationResponse,
+    UsageCost,
+)
 from src.services.llm_wrapper import complete, stream_complete, get_router
 from src.services.pricing import calculate_cost
 
 PROMPT_VERSION = "v1"
 
 
-
-
-
-async def generate_estimation(
-    description: str,
-    project_type: ProjectType,
-    detail_level: DetailLevel,
-    output_format: OutputFormat,
-) -> EstimationResponse:
+async def generate_estimation(request: EstimationRequest) -> EstimationResponse:
     """Generate a software effort estimation from a project description.
 
     Args:
-        description: Text describing the software project.
-        project_type: Category of the project.
-        detail_level: How granular the breakdown should be.
-        output_format: Structure of the output.
+        request: Validated estimation request containing description and options.
 
     Returns:
         EstimationResponse with the generated estimation, model used, and usage cost.
@@ -48,12 +41,6 @@ async def generate_estimation(
     settings = get_settings()
     primary_model = settings.llm_models[0] if settings.llm_models else "unknown"
 
-    request = EstimationRequest(
-        description=description,
-        project_type=project_type,
-        detail_level=detail_level,
-        output_format=output_format,
-    )
     system_prompt, user_message = render_estimation_prompt(request, model=primary_model)
 
     call_logger = logger.bind(endpoint="/estimate", mode="sync")
@@ -120,10 +107,7 @@ async def generate_estimation(
 
 
 async def stream_estimation(
-    description: str,
-    project_type: ProjectType,
-    detail_level: DetailLevel,
-    output_format: OutputFormat,
+    request: EstimationRequest,
 ) -> AsyncGenerator[str | EstimationResponse, None]:
     """Generate a software effort estimation using streaming.
 
@@ -134,12 +118,6 @@ async def stream_estimation(
     settings = get_settings()
     primary_model = settings.llm_models[0] if settings.llm_models else "unknown"
 
-    request = EstimationRequest(
-        description=description,
-        project_type=project_type,
-        detail_level=detail_level,
-        output_format=output_format,
-    )
     system_prompt, user_message = render_estimation_prompt(request, model=primary_model)
 
     call_logger = logger.bind(endpoint="/estimate/stream", mode="stream")
