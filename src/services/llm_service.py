@@ -14,67 +14,18 @@ from typing import AsyncGenerator
 
 import time
 
-from src.context.examples import ESTIMATION_EXAMPLES
 from src.core.config import get_settings
 from src.core.exceptions import ProviderAuthError, ProviderRateLimitError
 from src.core.logging import logger
-from src.schemas.estimation import DetailLevel, EstimationResponse, OutputFormat, ProjectType, UsageCost
+from src.prompts.loader import render_estimation_prompt
+from src.schemas.estimation import DetailLevel, EstimationRequest, EstimationResponse, OutputFormat, ProjectType, UsageCost
 from src.services.llm_wrapper import complete, stream_complete, get_router
 from src.services.pricing import calculate_cost
 
 PROMPT_VERSION = "v1"
 
 
-def _build_system_prompt() -> str:
-    """Build the system prompt with few-shot examples injected.
 
-    This is the CAG step: all reference context travels in every request.
-    The LLM receives both the instructions AND the examples in the system role,
-    so it can learn the expected output format and level of detail.
-    """
-    examples_text = ""
-    for i, example in enumerate(ESTIMATION_EXAMPLES, start=1):
-        examples_text += f"""
-                        --- Example {i} ---
-                        Meeting transcript:
-                        {example["meeting_summary"]}
-
-                        Estimation:
-                        {example["estimation"]}
-                        """
-
-    return f"""You are a senior software estimation consultant with 15+ years of experience \
-delivering accurate effort and cost estimates across web development, cloud infrastructure, \
-third-party integrations, and computational design projects. \
-You have a strong track record of producing estimates that match actual delivery within a 15% margin.
-
-Your task is to analyse a meeting transcript and produce a professional, structured software \
-effort estimation in Markdown format.
-
-The following section contains real estimation examples from previous projects at this company. \
-Use them to calibrate your response in three specific ways:
-- Hourly rates and cost structure must be consistent with these examples.
-- Task granularity and breakdown depth should match the level of detail shown.
-- Output format and section structure must follow the same pattern.
-
-{examples_text}
-
-Now produce the estimation for the new project description. Your response must include:
-1. A 2–3 sentence project summary.
-2. A breakdown by functional module or technical area. For each module, provide a table \
-with tasks, estimated hours, required profiles, and cost.
-3. A final summary table with total hours and cost per module, plus a grand total.
-4. The recommended team composition with total hours per profile.
-5. A "Main Risks & Assumptions" section with at least 3 items.
-6. An estimated delivery range in weeks and an hour range (e.g. 110–125 h) accounting for uncertainty.
-
-Additional rules:
-- Use EUR as currency.
-- Round hours to multiples of 4.
-- Be specific and technical. Avoid vague statements.
-- Write entirely in English.
-
-Project description provided by the user:"""
 
 
 async def generate_estimation(
@@ -94,21 +45,20 @@ async def generate_estimation(
     Returns:
         EstimationResponse with the generated estimation, model used, and usage cost.
     """
-    system_prompt = _build_system_prompt()
-
     settings = get_settings()
     primary_model = settings.llm_models[0] if settings.llm_models else "unknown"
+
+    request = EstimationRequest(
+        description=description,
+        project_type=project_type,
+        detail_level=detail_level,
+        output_format=output_format,
+    )
+    system_prompt, user_message = render_estimation_prompt(request, model=primary_model)
 
     call_logger = logger.bind(endpoint="/estimate", mode="sync")
     call_logger.info("llm_call_started", models=get_router().model_list)
     start = time.time()
-
-    user_message = (
-        f"Project type: {project_type.value}\n"
-        f"Detail level: {detail_level.value}\n"
-        f"Output format: {output_format.value}\n\n"
-        f"Project description:\n{description}"
-    )
 
     try:
         response = await complete(
@@ -181,18 +131,20 @@ async def stream_estimation(
         Text chunks as they arrive from the model.
         The final yielded item is an EstimationResponse with full metadata.
     """
-    system_prompt = _build_system_prompt()
+    settings = get_settings()
+    primary_model = settings.llm_models[0] if settings.llm_models else "unknown"
+
+    request = EstimationRequest(
+        description=description,
+        project_type=project_type,
+        detail_level=detail_level,
+        output_format=output_format,
+    )
+    system_prompt, user_message = render_estimation_prompt(request, model=primary_model)
 
     call_logger = logger.bind(endpoint="/estimate/stream", mode="stream")
     call_logger.info("llm_call_started", models=get_router().model_list)
     start = time.time()
-
-    user_message = (
-        f"Project type: {project_type.value}\n"
-        f"Detail level: {detail_level.value}\n"
-        f"Output format: {output_format.value}\n\n"
-        f"Project description:\n{description}"
-    )
 
     messages = [
         {"role": "system", "content": system_prompt},

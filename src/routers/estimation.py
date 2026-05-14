@@ -9,8 +9,8 @@ from src.schemas.estimation import EstimationRequest, EstimationResponse
 from src.services.llm_service import (
     generate_estimation,
     stream_estimation,
-    _build_system_prompt,
 )
+from src.prompts.loader import render_estimation_prompt
 
 router = APIRouter(prefix="/api/v1", tags=["Estimation"])
 
@@ -80,4 +80,13 @@ async def estimate_stream(request: EstimationRequest) -> StreamingResponse:
 )
 async def get_context() -> dict:
     """GET /api/v1/context"""
-    return {"system_prompt": _build_system_prompt()}
+    from src.schemas.estimation import DetailLevel, OutputFormat, ProjectType
+
+    dummy = EstimationRequest(
+        description="Placeholder request used to render the active system prompt for inspection.",
+        project_type=ProjectType.WEB_SAAS,
+        detail_level=DetailLevel.MEDIUM,
+        output_format=OutputFormat.PHASES_TABLE,
+    )
+    system, _ = render_estimation_prompt(dummy)
+    return {"system_prompt": system}
