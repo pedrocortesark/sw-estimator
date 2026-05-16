@@ -14,80 +14,40 @@ from typing import AsyncGenerator
 
 import time
 
-from src.context.examples import ESTIMATION_EXAMPLES
 from src.core.config import get_settings
 from src.core.exceptions import ProviderAuthError, ProviderRateLimitError
 from src.core.logging import logger
-from src.schemas.estimation import EstimationResponse, UsageCost
+from src.prompts.loader import render_estimation_prompt
+from src.schemas.estimation import (
+    EstimationRequest,
+    EstimationResponse,
+    UsageCost,
+)
 from src.services.llm_wrapper import complete, stream_complete, get_router
 from src.services.pricing import calculate_cost
 
-
-def _build_system_prompt() -> str:
-    """Build the system prompt with few-shot examples injected.
-
-    This is the CAG step: all reference context travels in every request.
-    The LLM receives both the instructions AND the examples in the system role,
-    so it can learn the expected output format and level of detail.
-    """
-    examples_text = ""
-    for i, example in enumerate(ESTIMATION_EXAMPLES, start=1):
-        examples_text += f"""
-                        --- Example {i} ---
-                        Meeting transcript:
-                        {example["meeting_summary"]}
-
-                        Estimation:
-                        {example["estimation"]}
-                        """
-
-    return f"""You are a senior software estimation consultant with 15+ years of experience \
-delivering accurate effort and cost estimates across web development, cloud infrastructure, \
-third-party integrations, and computational design projects. \
-You have a strong track record of producing estimates that match actual delivery within a 15% margin.
-
-Your task is to analyse a meeting transcript and produce a professional, structured software \
-effort estimation in Markdown format.
-
-The following section contains real estimation examples from previous projects at this company. \
-Use them to calibrate your response in three specific ways:
-- Hourly rates and cost structure must be consistent with these examples.
-- Task granularity and breakdown depth should match the level of detail shown.
-- Output format and section structure must follow the same pattern.
-
-{examples_text}
-
-Now produce the estimation for the new transcript. Your response must include:
-1. A 2–3 sentence project summary.
-2. A breakdown by functional module or technical area. For each module, provide a table \
-with tasks, estimated hours, required profiles, and cost.
-3. A final summary table with total hours and cost per module, plus a grand total.
-4. The recommended team composition with total hours per profile.
-5. A "Main Risks & Assumptions" section with at least 3 items.
-6. An estimated delivery range in weeks and an hour range (e.g. 110–125 h) accounting for uncertainty.
-
-Additional rules:
-- Use EUR as currency.
-- Round hours to multiples of 4.
-- Be specific and technical. Avoid vague statements.
-- Write entirely in English.
-
-Meeting transcript provided by the user:"""
+PROMPT_VERSION = "v1"
 
 
-async def generate_estimation(transcript: str) -> EstimationResponse:
-    """Generate a software effort estimation from a meeting transcript.
+async def generate_estimation(
+    request: EstimationRequest,
+    prompt_version: str = PROMPT_VERSION,
+) -> EstimationResponse:
+    """Generate a software effort estimation from a project description.
 
     Args:
-        transcript: Raw text of the meeting transcription.
+        request:        Validated estimation request containing description and options.
+        prompt_version: Template version to use (default: PROMPT_VERSION constant).
 
     Returns:
         EstimationResponse with the generated estimation, model used, and usage cost.
     """
-    system_prompt = _build_system_prompt()
-
     settings = get_settings()
     primary_model = settings.llm_models[0] if settings.llm_models else "unknown"
+
+    system_prompt, user_message = render_estimation_prompt(
+        request, version=prompt_version, model=primary_model
+    )
 
     call_logger = logger.bind(endpoint="/estimate", mode="sync")
     call_logger.info("llm_call_started", models=get_router().model_list)
@@ -97,7 +57,7 @@ async def generate_estimation(transcript: str) -> EstimationResponse:
         response = await complete(
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Meeting transcript:\n{transcript}"},
+                {"role": "user", "content": user_message},
             ]
         )
     except (ProviderAuthError, ProviderRateLimitError) as exc:
@@ -139,7 +99,8 @@ async def generate_estimation(transcript: str) -> EstimationResponse:
     )
 
     return EstimationResponse(
-        estimation=response.choices[0].message.content,
+        text=response.choices[0].message.content,
+        prompt_version=prompt_version,
         provider_used=model_used.split("/")[0] if "/" in model_used else model_used,
         model_used=model_used,
         usage=UsageCost(
@@ -152,7 +113,8 @@ async def generate_estimation(transcript: str) -> EstimationResponse:
 
 
 async def stream_estimation(
-    transcript: str,
+    request: EstimationRequest,
+    prompt_version: str = PROMPT_VERSION,
 ) -> AsyncGenerator[str | EstimationResponse, None]:
     """Generate a software effort estimation using streaming.
 
@@ -160,7 +122,12 @@ async def stream_estimation(
         Text chunks as they arrive from the model.
         The final yielded item is an EstimationResponse with full metadata.
     """
-    system_prompt = _build_system_prompt()
+    settings = get_settings()
+    primary_model = settings.llm_models[0] if settings.llm_models else "unknown"
+
+    system_prompt, user_message = render_estimation_prompt(
+        request, version=prompt_version, model=primary_model
+    )
 
     call_logger = logger.bind(endpoint="/estimate/stream", mode="stream")
     call_logger.info("llm_call_started", models=get_router().model_list)
@@ -168,7 +135,7 @@ async def stream_estimation(
 
     messages = [
         {"role": "system", "content": system_prompt},
-        {"role": "user", "content": f"Meeting transcript:\n{transcript}"},
+        {"role": "user", "content": user_message},
     ]
 
     full_text = ""
@@ -238,7 +205,8 @@ async def stream_estimation(
     )
 
     yield EstimationResponse(
-        estimation=full_text,
+        text=full_text,
+        prompt_version=prompt_version,
         provider_used=model_used.split("/")[0] if "/" in model_used else model_used,
         model_used=model_used,
         usage=UsageCost(

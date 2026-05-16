@@ -125,3 +125,4 @@ async def test_estimate_returns_500_on_unexpected_error(client: AsyncClient):
         response = await client.post("/api/v1/estimate", json=VALID_PAYLOAD)
 
     assert response.status_code == 500
+

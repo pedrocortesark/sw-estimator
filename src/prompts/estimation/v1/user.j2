@@ -1,0 +1,17 @@
+Project type: {{ project_type }}
+Detail level: {{ detail_level }}
+Output format: {{ output_format }}
+
+{% if prompt_style == "xml" %}<project_description>{% else %}## Project description{% endif %}
+{{ description }}
+{% if prompt_style == "xml" %}</project_description>{% else %}---{% endif %}
+{% if reference_projects %}
+{% if prompt_style == "xml" %}<reference_projects>{% else %}## Reference projects{% endif %}
+The following past projects are provided as calibration anchors. Use their
+actual hours to sanity-check your estimate, but do not blindly copy them.
+
+{% for rp in reference_projects %}
+- **{{ rp.name }}** — {{ rp.description }} | Delivered: {{ rp.total_hours }} h{% if rp.notes %} | Note: {{ rp.notes }}{% endif %}
+{% endfor %}
+{% if prompt_style == "xml" %}</reference_projects>{% else %}---{% endif %}
+{% endif %}

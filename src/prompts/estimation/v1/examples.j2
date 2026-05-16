@@ -1,0 +1,285 @@
+--- Example 1 — Multi-tenant SaaS for restaurant management ---
+
+Project description:
+The client operates a chain of 12 restaurants and needs a web SaaS where each venue
+has its own account. The platform must cover a digital POS (table management, order
+taking, split billing), real-time kitchen display, inventory management with low-stock
+alerts, and a monthly reporting dashboard exportable to PDF. Integration with Stripe
+for payments and with three local suppliers' APIs for automatic restocking orders.
+
+Estimation:
+
+# Estimation: Multi-Tenant Restaurant SaaS
+
+## Executive summary
+Complex multi-tenant platform combining real-time POS operations, third-party payment
+and supplier integrations, and a reporting layer. The real-time kitchen display and
+multi-tenant data isolation are the highest-risk items.
+
+---
+
+## Breakdown by module
+
+### 1. Authentication & Multi-Tenancy
+| Task | Hours | Profile | Notes |
+|---|---|---|---|
+| Tenant model, subdomain routing, row-level isolation | 16h | Backend Engineer | PostgreSQL RLS |
+| Auth (JWT + refresh tokens, roles: owner / manager / staff) | 12h | Backend Engineer | |
+| Tenant onboarding flow + admin panel | 12h | Full-Stack Engineer | |
+| **Subtotal** | **40h** | | |
+
+### 2. POS — Table & Order Management
+| Task | Hours | Profile | Notes |
+|---|---|---|---|
+| Floor plan editor (drag-and-drop tables) | 20h | Frontend Engineer | Canvas-based |
+| Order creation, modification, status lifecycle | 16h | Full-Stack Engineer | |
+| Split billing, partial payments, tips | 12h | Backend Engineer | |
+| Stripe integration (card-present + online) | 16h | Backend Engineer | Stripe Terminal SDK |
+| **Subtotal** | **64h** | | |
+
+### 3. Kitchen Display System (KDS)
+| Task | Hours | Profile | Notes |
+|---|---|---|---|
+| Real-time order push via WebSocket | 12h | Backend Engineer | Redis pub/sub |
+| KDS frontend (Next.js, auto-refresh, bump bar) | 16h | Frontend Engineer | |
+| Order priority and timer alerts | 8h | Full-Stack Engineer | |
+| **Subtotal** | **36h** | | |
+
+### 4. Inventory & Restocking
+| Task | Hours | Profile | Notes |
+|---|---|---|---|
+| Ingredient catalogue, unit-of-measure normalisation | 8h | Backend Engineer | |
+| Recipe → ingredient deduction on order close | 12h | Backend Engineer | |
+| Low-stock alert rules + email/SMS notifications | 8h | Backend Engineer | |
+| Supplier API integrations (×3) | 24h | Backend Engineer | 8h each |
+| **Subtotal** | **52h** | | |
+
+### 5. Reporting Dashboard
+| Task | Hours | Profile | Notes |
+|---|---|---|---|
+| Revenue, covers, avg ticket KPIs | 12h | Full-Stack Engineer | |
+| Charts (Recharts) + date-range filter | 8h | Frontend Engineer | |
+| PDF export (React-PDF server-side rendering) | 8h | Backend Engineer | |
+| **Subtotal** | **28h** | | |
+
+### 6. Infrastructure & DevOps
+| Task | Hours | Profile | Notes |
+|---|---|---|---|
+| PostgreSQL multi-tenant DB, Redis, S3 on AWS | 8h | DevOps Engineer | |
+| Docker Compose → ECS Fargate migration | 8h | DevOps Engineer | |
+| CI/CD (GitHub Actions), staging + prod environments | 8h | DevOps Engineer | |
+| **Subtotal** | **24h** | | |
+
+---
+
+## Summary table
+| Module | Hours | Est. Cost (€75/h avg) |
+|---|---|---|
+| Authentication & Multi-Tenancy | 40h | €3,000 |
+| POS — Table & Order Management | 64h | €4,800 |
+| Kitchen Display System | 36h | €2,700 |
+| Inventory & Restocking | 52h | €3,900 |
+| Reporting Dashboard | 28h | €2,100 |
+| Infrastructure & DevOps | 24h | €1,800 |
+| **Grand total** | **244h** | **€18,300** |
+
+## Recommended team
+| Profile | Hours |
+|---|---|
+| Backend Engineer (×2) | 148h |
+| Frontend Engineer | 44h |
+| Full-Stack Engineer | 28h |
+| DevOps Engineer | 24h |
+
+## Main risks & assumptions
+1. **Stripe Terminal SDK** requires certified hardware; procurement lead time not included.
+2. Supplier APIs may have rate limits or require NDA-gated credentials; integration scope assumes REST/JSON.
+3. Multi-tenant RLS adds query complexity; performance testing under concurrent load is essential.
+4. Real-time KDS latency target (<500 ms) must be validated in a load test before go-live.
+
+**Delivery range:** 14–18 weeks · 230–260 h
+
+
+--- Example 2 — Mobile app for field technicians with offline sync ---
+
+Project description:
+A facilities management company needs a React Native app for Android tablets used by
+field technicians. Technicians must be able to consult and update work orders, attach
+photos and signatures, and log parts used against an asset register. The app must work
+fully offline and sync when connectivity is restored. The backend is an existing Django
+REST API; the app only needs to integrate with it.
+
+Estimation:
+
+# Estimation: Field Technician Mobile App (React Native + Offline Sync)
+
+## Executive summary
+React Native application targeting Android tablets with a robust offline-first
+architecture. The main complexity is the conflict-resolution strategy for concurrent
+edits and the binary asset (photos) sync pipeline.
+
+---
+
+## Breakdown by module
+
+### 1. Offline-First Data Layer
+| Task | Hours | Profile | Notes |
+|---|---|---|---|
+| WatermelonDB schema (work orders, assets, parts) | 12h | Mobile Engineer | |
+| Sync adapter: pull changed records from Django API | 16h | Mobile Engineer | Delta sync by updated_at |
+| Sync adapter: push local mutations with conflict resolution | 16h | Mobile Engineer | Last-write-wins + merge log |
+| Photo upload queue (background, retry on reconnect) | 12h | Mobile Engineer | Expo FileSystem + queue |
+| **Subtotal** | **56h** | | |
+
+### 2. Work Order Management
+| Task | Hours | Profile | Notes |
+|---|---|---|---|
+| Work order list (filter by status, asset, date) | 8h | Mobile Engineer | |
+| Work order detail — status transitions | 8h | Mobile Engineer | |
+| Parts consumption form (barcode scan or search) | 12h | Mobile Engineer | Expo BarCodeScanner |
+| Signature capture (touch canvas + PNG export) | 8h | Mobile Engineer | |
+| Photo attachment (camera + gallery, max 5/order) | 8h | Mobile Engineer | |
+| **Subtotal** | **44h** | | |
+
+### 3. Asset Register
+| Task | Hours | Profile | Notes |
+|---|---|---|---|
+| Asset catalogue browse + QR code lookup | 8h | Mobile Engineer | |
+| Asset detail and maintenance history (read-only) | 4h | Mobile Engineer | |
+| **Subtotal** | **12h** | | |
+
+### 4. Authentication & Connectivity UX
+| Task | Hours | Profile | Notes |
+|---|---|---|---|
+| JWT login, token storage (SecureStore), auto-refresh | 8h | Mobile Engineer | |
+| Offline banner + sync progress indicator | 4h | Mobile Engineer | |
+| **Subtotal** | **12h** | | |
+
+### 5. QA & Delivery
+| Task | Hours | Profile | Notes |
+|---|---|---|---|
+| Unit tests (sync logic, conflict resolution) | 12h | Mobile Engineer | Jest |
+| E2E smoke tests on physical Android tablet | 8h | QA Engineer | |
+| APK build, MDM distribution via AppConfig | 4h | DevOps Engineer | |
+| **Subtotal** | **24h** | | |
+
+---
+
+## Summary table
+| Module | Hours | Est. Cost (€70/h avg) |
+|---|---|---|
+| Offline-First Data Layer | 56h | €3,920 |
+| Work Order Management | 44h | €3,080 |
+| Asset Register | 12h | €840 |
+| Auth & Connectivity UX | 12h | €840 |
+| QA & Delivery | 24h | €1,680 |
+| **Grand total** | **148h** | **€10,360** |
+
+## Recommended team
+| Profile | Hours |
+|---|---|
+| Mobile Engineer (×1, senior) | 132h |
+| QA Engineer | 8h |
+| DevOps Engineer | 4h |
+| Backend Engineer (Django API) | 4h (advisory) |
+
+## Main risks & assumptions
+1. Conflict resolution strategy (last-write-wins) must be validated with the product owner; business rules may require manual merge for some fields.
+2. Django API must expose `updated_at` timestamps on all synced resources; backend changes are not in scope.
+3. Barcode scanning accuracy depends on tablet camera quality; a fallback manual-entry path is included.
+
+**Delivery range:** 10–13 weeks · 140–160 h
+
+
+--- Example 3 — E-commerce analytics data pipeline ---
+
+Project description:
+An online retailer wants to consolidate data from Shopify, Google Ads, and Meta Ads
+into a single data warehouse (BigQuery). They need nightly ETL jobs that compute
+cohort-based LTV, CAC by channel, and weekly retention curves. A lightweight BI
+dashboard (Metabase) must surface the KPIs to the marketing team with self-service
+filtering. Alerting when CAC exceeds a configurable threshold.
+
+Estimation:
+
+# Estimation: E-Commerce Analytics Data Pipeline
+
+## Executive summary
+Cloud-native ELT pipeline on BigQuery with three source connectors, a dbt transformation
+layer for business metrics, and a Metabase BI layer. The CAC/LTV models require careful
+attribution logic alignment with the marketing team before implementation.
+
+---
+
+## Breakdown by module
+
+### 1. Data Ingestion (ELT Connectors)
+| Task | Hours | Profile | Notes |
+|---|---|---|---|
+| Shopify connector (orders, customers, products) via Airbyte | 8h | Data Engineer | Airbyte Cloud |
+| Google Ads connector (campaigns, ad groups, spend) | 4h | Data Engineer | Native Airbyte connector |
+| Meta Ads connector (campaigns, spend, impressions) | 4h | Data Engineer | Native Airbyte connector |
+| Raw landing zone schema design in BigQuery | 6h | Data Engineer | |
+| Incremental sync strategy + deduplication | 8h | Data Engineer | |
+| **Subtotal** | **30h** | | |
+
+### 2. dbt Transformation Layer
+| Task | Hours | Profile | Notes |
+|---|---|---|---|
+| Staging models (clean + type-cast raw data) | 8h | Analytics Engineer | |
+| Intermediate models: unified customer timeline | 12h | Analytics Engineer | |
+| LTV model (cohort-based, 30/60/90-day windows) | 16h | Analytics Engineer | |
+| CAC model (blended + by channel, attribution: last-click) | 12h | Analytics Engineer | |
+| Retention curve model (weekly cohorts) | 12h | Analytics Engineer | |
+| dbt tests (not_null, unique, accepted_values, relationships) | 8h | Analytics Engineer | |
+| **Subtotal** | **68h** | | |
+
+### 3. Orchestration
+| Task | Hours | Profile | Notes |
+|---|---|---|---|
+| Cloud Composer (Airflow) DAG setup, nightly schedule | 8h | Data Engineer | |
+| Failure alerting + Slack webhook notifications | 4h | Data Engineer | |
+| Backfill strategy for historical data (18 months) | 4h | Data Engineer | |
+| **Subtotal** | **16h** | | |
+
+### 4. BI Dashboard (Metabase)
+| Task | Hours | Profile | Notes |
+|---|---|---|---|
+| Metabase Cloud setup, BigQuery connection | 2h | Analytics Engineer | |
+| CAC, LTV, retention dashboards (3 dashboards, ~12 charts) | 16h | Analytics Engineer | |
+| Self-service filter parameters (date range, channel, country) | 8h | Analytics Engineer | |
+| CAC threshold alert (email) via Metabase alerts | 4h | Analytics Engineer | |
+| **Subtotal** | **30h** | | |
+
+### 5. Infrastructure & Documentation
+| Task | Hours | Profile | Notes |
+|---|---|---|---|
+| BigQuery dataset IAM, cost controls, partitioning | 6h | Data Engineer | |
+| dbt docs + data dictionary | 4h | Analytics Engineer | |
+| Runbook: adding new sources, modifying models | 4h | Analytics Engineer | |
+| **Subtotal** | **14h** | | |
+
+---
+
+## Summary table
+| Module | Hours | Est. Cost (€72/h avg) |
+|---|---|---|
+| Data Ingestion | 30h | €2,160 |
+| dbt Transformation | 68h | €4,896 |
+| Orchestration | 16h | €1,152 |
+| BI Dashboard | 30h | €2,160 |
+| Infrastructure & Docs | 14h | €1,008 |
+| **Grand total** | **158h** | **€11,376** |
+
+## Recommended team
+| Profile | Hours |
+|---|---|
+| Analytics Engineer (×1, senior) | 110h |
+| Data Engineer (×1) | 48h |
+
+## Main risks & assumptions
+1. Attribution model (last-click) must be agreed upfront; switching to data-driven attribution later would require rewriting the CAC model.
+2. Shopify historical export may be rate-limited; a dedicated backfill window of 5–7 days should be planned.
+3. Airbyte Cloud costs are not included in the estimate; expected €60–120/month depending on sync frequency.
+
+**Delivery range:** 9–11 weeks · 148–168 h
