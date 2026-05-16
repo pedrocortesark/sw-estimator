@@ -40,7 +40,10 @@ from src.core.exceptions import (
 )
 from src.core.logging import logger
 from src.schemas.estimation import EstimationResponse, EstimationResult, UsageCost
-from src.services.llm_wrapper import stream_complete, get_router  # kept for stream_estimation
+from src.services.llm_wrapper import (
+    stream_complete,
+    get_router,
+)  # kept for stream_estimation
 from src.services.pricing import calculate_cost
 
 
@@ -130,19 +133,20 @@ async def generate_estimation(
             client = instructor.from_openai(
                 AsyncOpenAI(api_key=settings.openai_api_key)
             )
-            estimation_result, completion = (
-                await client.chat.completions.create_with_completion(
-                    response_model=EstimationResult,
-                    model=settings.openai_model,
-                    temperature=0.2,
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {
-                            "role": "user",
-                            "content": f"Meeting transcript:\n{transcript}",
-                        },
-                    ],
-                )
+            (
+                estimation_result,
+                completion,
+            ) = await client.chat.completions.create_with_completion(
+                response_model=EstimationResult,
+                model=settings.openai_model,
+                temperature=0.2,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {
+                        "role": "user",
+                        "content": f"Meeting transcript:\n{transcript}",
+                    },
+                ],
             )
             model_used = completion.model
             input_tokens = completion.usage.prompt_tokens
@@ -152,20 +156,21 @@ async def generate_estimation(
             client = instructor.from_anthropic(
                 AsyncAnthropic(api_key=settings.anthropic_api_key)
             )
-            estimation_result, completion = (
-                await client.messages.create_with_completion(
-                    response_model=EstimationResult,
-                    model=settings.anthropic_model,
-                    max_tokens=4096,
-                    temperature=0.2,
-                    system=system_prompt,
-                    messages=[
-                        {
-                            "role": "user",
-                            "content": f"Meeting transcript:\n{transcript}",
-                        },
-                    ],
-                )
+            (
+                estimation_result,
+                completion,
+            ) = await client.messages.create_with_completion(
+                response_model=EstimationResult,
+                model=settings.anthropic_model,
+                max_tokens=4096,
+                temperature=0.2,
+                system=system_prompt,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": f"Meeting transcript:\n{transcript}",
+                    },
+                ],
             )
             model_used = completion.model
             input_tokens = completion.usage.input_tokens
@@ -182,19 +187,27 @@ async def generate_estimation(
         raise ProviderAuthError(str(exc)) from exc
     except (OpenAIRateLimitError, AnthropicRateLimitError) as exc:
         latency = round((time.time() - start) * 1000, 1)
-        call_logger.warning("llm_call_failed", error_type="RateLimitError", latency_ms=latency)
+        call_logger.warning(
+            "llm_call_failed", error_type="RateLimitError", latency_ms=latency
+        )
         raise ProviderRateLimitError(str(exc)) from exc
     except (OpenAIBadRequestError, AnthropicBadRequestError) as exc:
         latency = round((time.time() - start) * 1000, 1)
-        call_logger.error("llm_call_failed", error_type="BadRequestError", latency_ms=latency)
+        call_logger.error(
+            "llm_call_failed", error_type="BadRequestError", latency_ms=latency
+        )
         raise ProviderBadRequestError(str(exc)) from exc
     except (OpenAIConnectionError, AnthropicConnectionError) as exc:
         latency = round((time.time() - start) * 1000, 1)
-        call_logger.error("llm_call_failed", error_type="ConnectionError", latency_ms=latency)
+        call_logger.error(
+            "llm_call_failed", error_type="ConnectionError", latency_ms=latency
+        )
         raise ProviderConnectionError(str(exc)) from exc
     except (OpenAIInternalError, AnthropicInternalError) as exc:
         latency = round((time.time() - start) * 1000, 1)
-        call_logger.error("llm_call_failed", error_type="InternalError", latency_ms=latency)
+        call_logger.error(
+            "llm_call_failed", error_type="InternalError", latency_ms=latency
+        )
         raise ProviderInternalError(str(exc)) from exc
 
     latency = round((time.time() - start) * 1000, 1)
