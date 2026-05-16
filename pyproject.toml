@@ -7,6 +7,7 @@ dependencies = [
     "anthropic>=0.97.0",
     "fastapi>=0.136.1",
     "httpx>=0.28.1",
+    "instructor>=1.15.1",
     "litellm>=1.83.0",
     "openai>=2.33.0",
     "pydantic-settings>=2.14.0",

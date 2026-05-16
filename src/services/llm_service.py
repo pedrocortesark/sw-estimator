@@ -1,25 +1,46 @@
-"""LLM aggregator service — the core of the CAG architecture.
+"""LLM service — uses Instructor to call OpenAI/Anthropic and return structured EstimationResult.
 
 This module is responsible for:
-1. Building the system prompt with the static few-shot examples injected
-   (Context-Augmented Generation).
-2. Routing requests through LiteLLM Router with automatic fallback.
-3. Returning a structured EstimationResponse.
-
-LiteLLM Router handles provider selection, retries, and fallback automatically.
-Primary model is tried first; if it fails, the fallback model takes over.
+1. Building the system prompt with few-shot examples injected (CAG).
+2. Calling the configured provider via Instructor so the LLM fills EstimationResult directly.
+3. Returning a dict with the parsed result plus model/provider/usage metadata.
 """
 
 from typing import AsyncGenerator
 
 import time
 
+import instructor
+from anthropic import (
+    AsyncAnthropic,
+    AuthenticationError as AnthropicAuthError,
+    RateLimitError as AnthropicRateLimitError,
+    BadRequestError as AnthropicBadRequestError,
+    APIConnectionError as AnthropicConnectionError,
+    InternalServerError as AnthropicInternalError,
+)
+from openai import (
+    AsyncOpenAI,
+    AuthenticationError as OpenAIAuthError,
+    RateLimitError as OpenAIRateLimitError,
+    BadRequestError as OpenAIBadRequestError,
+    APIConnectionError as OpenAIConnectionError,
+    InternalServerError as OpenAIInternalError,
+)
+
 from src.context.examples import ESTIMATION_EXAMPLES
 from src.core.config import get_settings
-from src.core.exceptions import ProviderAuthError, ProviderRateLimitError
+from src.core.exceptions import (
+    ProviderAuthError,
+    ProviderBadRequestError,
+    ProviderConnectionError,
+    ProviderInternalError,
+    ProviderRateLimitError,
+    UnknownProviderError,
+)
 from src.core.logging import logger
-from src.schemas.estimation import EstimationResponse, UsageCost
-from src.services.llm_wrapper import complete, stream_complete, get_router
+from src.schemas.estimation import EstimationResponse, EstimationResult, UsageCost
+from src.services.llm_wrapper import stream_complete, get_router  # kept for stream_estimation
 from src.services.pricing import calculate_cost
 
 
@@ -75,57 +96,109 @@ Additional rules:
 Meeting transcript provided by the user:"""
 
 
-async def generate_estimation(transcript: str) -> EstimationResponse:
-    """Generate a software effort estimation from a meeting transcript.
+async def generate_estimation(
+    transcript: str,
+    provider_override: str | None = None,
+) -> dict:
+    """Generate a structured software effort estimation from a meeting transcript.
+
+    Uses Instructor to call the configured LLM provider and parse the response
+    directly into an EstimationResult instance.
 
     Args:
         transcript: Raw text of the meeting transcription.
+        provider_override: Optional provider name ('openai' or 'anthropic').
+            When supplied, takes precedence over settings.llm_provider.
 
     Returns:
-        EstimationResponse with the generated estimation, model used, and usage cost.
+        dict with keys:
+            - estimation_result: EstimationResult instance filled by the LLM.
+            - model: model identifier returned by the provider.
+            - provider: provider name used ('openai' or 'anthropic').
+            - usage: UsageCost with token counts and estimated cost.
     """
-    system_prompt = _build_system_prompt()
-
     settings = get_settings()
-    primary_model = settings.llm_models[0] if settings.llm_models else "unknown"
+    provider = provider_override or settings.llm_provider
 
-    call_logger = logger.bind(endpoint="/estimate", mode="sync")
-    call_logger.info("llm_call_started", models=get_router().model_list)
+    system_prompt = _build_system_prompt()
+    call_logger = logger.bind(endpoint="/estimate", provider=provider)
+    call_logger.info("llm_call_started")
     start = time.time()
 
     try:
-        response = await complete(
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Meeting transcript:\n{transcript}"},
-            ]
-        )
-    except (ProviderAuthError, ProviderRateLimitError) as exc:
+        if provider == "openai":
+            client = instructor.from_openai(
+                AsyncOpenAI(api_key=settings.openai_api_key)
+            )
+            estimation_result, completion = (
+                await client.chat.completions.create_with_completion(
+                    response_model=EstimationResult,
+                    model=settings.openai_model,
+                    temperature=0.2,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {
+                            "role": "user",
+                            "content": f"Meeting transcript:\n{transcript}",
+                        },
+                    ],
+                )
+            )
+            model_used = completion.model
+            input_tokens = completion.usage.prompt_tokens
+            output_tokens = completion.usage.completion_tokens
+
+        elif provider == "anthropic":
+            client = instructor.from_anthropic(
+                AsyncAnthropic(api_key=settings.anthropic_api_key)
+            )
+            estimation_result, completion = (
+                await client.messages.create_with_completion(
+                    response_model=EstimationResult,
+                    model=settings.anthropic_model,
+                    max_tokens=4096,
+                    temperature=0.2,
+                    system=system_prompt,
+                    messages=[
+                        {
+                            "role": "user",
+                            "content": f"Meeting transcript:\n{transcript}",
+                        },
+                    ],
+                )
+            )
+            model_used = completion.model
+            input_tokens = completion.usage.input_tokens
+            output_tokens = completion.usage.output_tokens
+
+        else:
+            raise UnknownProviderError(
+                f"Unsupported provider: {provider!r}. Valid values are 'openai' and 'anthropic'."
+            )
+
+    except (OpenAIAuthError, AnthropicAuthError) as exc:
         latency = round((time.time() - start) * 1000, 1)
-        error_type = type(exc).__name__
-        log_fn = (
-            call_logger.error
-            if isinstance(exc, ProviderAuthError)
-            else call_logger.warning
-        )
-        log_fn("llm_call_failed", error_type=error_type, latency_ms=latency)
-        raise
+        call_logger.error("llm_call_failed", error_type="AuthError", latency_ms=latency)
+        raise ProviderAuthError(str(exc)) from exc
+    except (OpenAIRateLimitError, AnthropicRateLimitError) as exc:
+        latency = round((time.time() - start) * 1000, 1)
+        call_logger.warning("llm_call_failed", error_type="RateLimitError", latency_ms=latency)
+        raise ProviderRateLimitError(str(exc)) from exc
+    except (OpenAIBadRequestError, AnthropicBadRequestError) as exc:
+        latency = round((time.time() - start) * 1000, 1)
+        call_logger.error("llm_call_failed", error_type="BadRequestError", latency_ms=latency)
+        raise ProviderBadRequestError(str(exc)) from exc
+    except (OpenAIConnectionError, AnthropicConnectionError) as exc:
+        latency = round((time.time() - start) * 1000, 1)
+        call_logger.error("llm_call_failed", error_type="ConnectionError", latency_ms=latency)
+        raise ProviderConnectionError(str(exc)) from exc
+    except (OpenAIInternalError, AnthropicInternalError) as exc:
+        latency = round((time.time() - start) * 1000, 1)
+        call_logger.error("llm_call_failed", error_type="InternalError", latency_ms=latency)
+        raise ProviderInternalError(str(exc)) from exc
 
     latency = round((time.time() - start) * 1000, 1)
-    model_used = response.model
-    input_tokens = response.usage.prompt_tokens
-    output_tokens = response.usage.completion_tokens
     cost_usd = calculate_cost(model_used, input_tokens, output_tokens)
-    # LiteLLM expone si la respuesta vino de caché en _hidden_params.
-    cache_hit = getattr(response, "_hidden_params", {}).get("cache_hit", False)
-
-    # Si LiteLLM usó un modelo distinto al primario, hubo fallback automático.
-    if primary_model not in model_used:
-        call_logger.warning(
-            "fallback_triggered",
-            original_provider=primary_model,
-            fallback_provider=model_used,
-        )
 
     call_logger.info(
         "llm_call_completed",
@@ -134,21 +207,19 @@ async def generate_estimation(transcript: str) -> EstimationResponse:
         tokens_out=output_tokens,
         latency_ms=latency,
         cost_usd=round(cost_usd, 6),
-        finish_reason=response.choices[0].finish_reason,
-        cache_hit=cache_hit,
     )
 
-    return EstimationResponse(
-        estimation=response.choices[0].message.content,
-        provider_used=model_used.split("/")[0] if "/" in model_used else model_used,
-        model_used=model_used,
-        usage=UsageCost(
+    return {
+        "estimation_result": estimation_result,
+        "model": model_used,
+        "provider": provider,
+        "usage": UsageCost(
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             total_tokens=input_tokens + output_tokens,
             cost_usd=cost_usd,
         ),
-    )
+    }
 
 
 async def stream_estimation(

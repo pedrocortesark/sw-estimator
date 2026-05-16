@@ -36,9 +36,15 @@ async def estimate(request: EstimationRequest) -> EstimationResponse:
     Domain exceptions (ProviderRateLimitError, ProviderAuthError, UnknownProviderError)
     are handled globally by the exception handlers registered in main.py.
     """
-    return await generate_estimation(
+    result = await generate_estimation(
         transcript=request.transcript,
         provider_override=request.provider,
+    )
+    return EstimationResponse(
+        estimation=result["estimation_result"],
+        provider_used=result["provider"],
+        model_used=result["model"],
+        usage=result["usage"],
     )
 
 
