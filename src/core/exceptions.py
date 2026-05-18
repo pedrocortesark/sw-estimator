@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 from instructor.core import InstructorRetryException
 
 from src.core.logging import logger
+from src.guardrails.input import InputGuardrailViolation
 
 
 # ---------------------------------------------------------------------------
@@ -56,6 +57,15 @@ def setup_exception_handlers(app) -> None:
     Each handler translates a domain exception into a JSONResponse with the
     appropriate HTTP status code, keeping routers free of error-mapping logic.
     """
+
+    @app.exception_handler(InputGuardrailViolation)
+    async def input_guardrail_handler(
+        request: Request, exc: InputGuardrailViolation
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            content={"detail": exc.message, "reason": exc.reason},
+        )
 
     @app.exception_handler(ProviderRateLimitError)
     async def rate_limit_handler(

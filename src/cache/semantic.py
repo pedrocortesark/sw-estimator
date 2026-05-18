@@ -185,9 +185,9 @@ class EstimationSemanticCache:
         return ":".join(
             [
                 prompt_version,
-                getattr(request, "project_type", "default"),
-                getattr(request, "detail_level", "default"),
-                getattr(request, "output_format", "default"),
+                getattr(request, "project_type", None) or "default",
+                getattr(request, "detail_level", None) or "default",
+                getattr(request, "output_format", None) or "default",
             ]
         )
 

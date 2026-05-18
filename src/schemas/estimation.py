@@ -1,5 +1,15 @@
 from pydantic import BaseModel, Field, model_validator
 
+# ---------------------------------------------------------------------------
+# Pipeline-wide constants — imported by guardrails and prompt templates
+# ---------------------------------------------------------------------------
+
+#: Confidence percentage below which an estimate is considered out-of-scope.
+LOW_CONFIDENCE_THRESHOLD: float = 30.0
+
+#: Mandatory prefix for executive_summary when confidence is below threshold.
+OUT_OF_SCOPE_PREFIX = "Out of scope:"
+
 
 class EstimationRequest(BaseModel):
     """Payload sent by the client to request a software estimation.
@@ -22,6 +32,21 @@ class EstimationRequest(BaseModel):
         default=None,
         description="LLM provider to use: 'openai' or 'anthropic'. Defaults to the value in Settings.",
         examples=["openai", "anthropic"],
+    )
+    project_type: str | None = Field(
+        default=None,
+        description="Type of project (e.g. 'saas', 'mobile', 'web_saas'). Used to specialise the prompt.",
+        examples=["saas", "web_saas", "mobile"],
+    )
+    detail_level: str | None = Field(
+        default=None,
+        description="Granularity of the estimate: 'summary', 'medium', or 'detailed'.",
+        examples=["summary", "medium", "detailed"],
+    )
+    output_format: str | None = Field(
+        default=None,
+        description="How to present phases: 'phases_table', 'line_items', or 'narrative'.",
+        examples=["phases_table", "line_items", "narrative"],
     )
 
 
@@ -156,6 +181,33 @@ class EstimationResult(BaseModel):
             "team composition works in parallel where possible."
         )
     )
+    confidence_pct: float = Field(
+        default=100.0,
+        ge=0.0,
+        le=100.0,
+        description=(
+            "Confidence percentage (0-100) in the accuracy of this estimate. "
+            f"Values below {LOW_CONFIDENCE_THRESHOLD} signal that the transcript is "
+            "out-of-scope or too vague to estimate reliably."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def check_confidence_prefix(self) -> "EstimationResult":
+        """Enforce that low-confidence results declare themselves in the summary.
+
+        Instructor treats a raised ``ValueError`` as a structured output failure
+        and re-prompts the LLM automatically, giving it a chance to correct the
+        response before the retry budget is exhausted.
+        """
+        if self.confidence_pct < LOW_CONFIDENCE_THRESHOLD:
+            if not self.executive_summary.startswith(OUT_OF_SCOPE_PREFIX):
+                raise ValueError(
+                    f"confidence_pct={self.confidence_pct} is below "
+                    f"{LOW_CONFIDENCE_THRESHOLD}; executive_summary must start "
+                    f"with '{OUT_OF_SCOPE_PREFIX}'."
+                )
+        return self
 
     @model_validator(mode="after")
     def check_grand_totals(self) -> "EstimationResult":
@@ -200,4 +252,12 @@ class EstimationResponse(BaseModel):
     )
     usage: UsageCost = Field(
         description="Token usage and estimated cost for this request."
+    )
+    cached: bool = Field(
+        default=False,
+        description="True when the response was served from the semantic cache.",
+    )
+    prompt_version: str = Field(
+        default="v1",
+        description="Version tag of the Jinja2 prompt templates used to generate this estimation.",
     )

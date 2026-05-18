@@ -1,11 +1,11 @@
 """Tests for POST /api/v1/estimate."""
 
-from unittest.mock import AsyncMock, patch
-
 import pytest
 from httpx import AsyncClient
 
+from src.dependencies import get_estimation_service
 from src.schemas.estimation import (
+    EstimationResponse,
     EstimationResult,
     Phase,
     Task,
@@ -37,37 +37,35 @@ _MOCK_RESULT = EstimationResult(
     duration_weeks=2.0,
 )
 
-# What generate_estimation() actually returns (a dict, not EstimationResponse)
-MOCK_GENERATE_RESULT = {
-    "estimation_result": _MOCK_RESULT,
-    "provider": "anthropic",
-    "model": "claude-3-5-haiku-20241022",
-    "usage": UsageCost(
-        input_tokens=500,
-        output_tokens=200,
-        total_tokens=700,
-        cost_usd=0.000150,
-    ),
-}
+_MOCK_RESPONSE = EstimationResponse(
+    estimation=_MOCK_RESULT,
+    provider_used="anthropic",
+    model_used="claude-3-5-haiku-20241022",
+    usage=UsageCost(input_tokens=500, output_tokens=200, total_tokens=700, cost_usd=0.000150),
+)
+
+
+class _MockService:
+    async def estimate(self, request):
+        return _MOCK_RESPONSE
+
+
+class _FailingService:
+    async def estimate(self, request):
+        raise RuntimeError("LLM network timeout")
 
 
 @pytest.mark.asyncio
-async def test_estimate_returns_200_with_valid_transcript(client: AsyncClient):
-    """A valid transcript must return HTTP 200 and a well-shaped response.
-
-    We mock 'generate_estimation' so the test never calls Anthropic/OpenAI.
-    The mock replaces the function only for the duration of this test,
-    then restores the original automatically.
-    """
-    with patch(
-        "src.routers.estimation.generate_estimation",
-        new_callable=AsyncMock,
-        return_value=MOCK_GENERATE_RESULT,
-    ):
+async def test_estimate_returns_200_with_valid_transcript(client: AsyncClient, test_app):
+    """A valid transcript must return HTTP 200 and a well-shaped response."""
+    test_app.dependency_overrides[get_estimation_service] = lambda: _MockService()
+    try:
         response = await client.post(
             "/api/v1/estimate",
             json={"transcript": VALID_TRANSCRIPT},
         )
+    finally:
+        test_app.dependency_overrides.pop(get_estimation_service, None)
 
     assert response.status_code == 200
     body = response.json()
@@ -77,17 +75,16 @@ async def test_estimate_returns_200_with_valid_transcript(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_estimate_response_content(client: AsyncClient):
+async def test_estimate_response_content(client: AsyncClient, test_app):
     """The response body must match what the mocked service returns."""
-    with patch(
-        "src.routers.estimation.generate_estimation",
-        new_callable=AsyncMock,
-        return_value=MOCK_GENERATE_RESULT,
-    ):
+    test_app.dependency_overrides[get_estimation_service] = lambda: _MockService()
+    try:
         response = await client.post(
             "/api/v1/estimate",
             json={"transcript": VALID_TRANSCRIPT},
         )
+    finally:
+        test_app.dependency_overrides.pop(get_estimation_service, None)
 
     body = response.json()
     assert body["provider_used"] == "anthropic"
@@ -97,11 +94,7 @@ async def test_estimate_response_content(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_estimate_returns_422_when_transcript_missing(client: AsyncClient):
-    """FastAPI must return 422 Unprocessable Entity when 'transcript' is absent.
-
-    This validation is handled automatically by Pydantic — no mock needed
-    because the request never reaches our business logic.
-    """
+    """FastAPI must return 422 Unprocessable Entity when 'transcript' is absent."""
     response = await client.post("/api/v1/estimate", json={})
     assert response.status_code == 422
 
@@ -117,31 +110,37 @@ async def test_estimate_returns_422_when_transcript_too_short(client: AsyncClien
 
 
 @pytest.mark.asyncio
-async def test_estimate_returns_400_for_unknown_provider(client: AsyncClient):
-    """Requesting an unsupported provider name must return HTTP 400.
+async def test_estimate_returns_400_for_unknown_provider(client: AsyncClient, test_app):
+    """Requesting an unsupported provider name must return HTTP 400."""
+    from src.core.exceptions import UnknownProviderError
 
-    The service raises UnknownProviderError, which is caught by the global
-    exception handler in main.py and converted to a 400 response.
-    Here we let the real service run — the error is triggered before any LLM call.
-    """
-    response = await client.post(
-        "/api/v1/estimate",
-        json={"transcript": VALID_TRANSCRIPT, "provider": "grok"},
-    )
+    class _BadProviderService:
+        async def estimate(self, request):
+            raise UnknownProviderError(f"Unsupported provider: '{request.provider}'.")
+
+    test_app.dependency_overrides[get_estimation_service] = lambda: _BadProviderService()
+    try:
+        response = await client.post(
+            "/api/v1/estimate",
+            json={"transcript": VALID_TRANSCRIPT, "provider": "grok"},
+        )
+    finally:
+        test_app.dependency_overrides.pop(get_estimation_service, None)
+
     assert response.status_code == 400
 
 
 @pytest.mark.asyncio
-async def test_estimate_returns_500_on_unexpected_error(client: AsyncClient):
-    """If the LLM service raises an unexpected exception, the router must return 500."""
-    with patch(
-        "src.routers.estimation.generate_estimation",
-        new_callable=AsyncMock,
-        side_effect=RuntimeError("LLM network timeout"),
-    ):
+async def test_estimate_returns_500_on_unexpected_error(client: AsyncClient, test_app):
+    """If the service raises an unexpected exception, the router must return 500."""
+    test_app.dependency_overrides[get_estimation_service] = lambda: _FailingService()
+    try:
         response = await client.post(
             "/api/v1/estimate",
             json={"transcript": VALID_TRANSCRIPT},
         )
+    finally:
+        test_app.dependency_overrides.pop(get_estimation_service, None)
 
     assert response.status_code == 500
+

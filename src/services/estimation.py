@@ -83,7 +83,8 @@ class EstimationService:
         cache: EstimationSemanticCache | None = None,
         openai_client: AsyncOpenAI | None = None,
     ) -> None:
-        self._cache = cache or EstimationSemanticCache()
+        # cache=None means "skip layers 2 and 5b" — safe when Redis is absent.
+        self._cache = cache
         self._openai_client = openai_client
 
     # ------------------------------------------------------------------
@@ -103,9 +104,13 @@ class EstimationService:
         await self._run_input_guardrails(request)
 
         # --- Layer 2: semantic cache (read) ------------------------------
-        cached = self._lookup_cache(request)
-        if cached is not None:
-            return cached
+        cached_result = self._lookup_cache(request)
+        if cached_result is not None:
+            return self._build_response(
+                cached_result,
+                {"provider": "semantic_cache", "model": "cached", "input_tokens": 0, "output_tokens": 0},
+                cached=True,
+            )
 
         # --- Layer 3: prompt rendering -----------------------------------
         system_prompt, user_prompt = self._render_prompts(request)
@@ -119,7 +124,7 @@ class EstimationService:
         estimation_result = self._run_output_guardrails(estimation_result)
         self._store_cache(request, estimation_result)
 
-        return self._build_response(estimation_result, meta)
+        return self._build_response(estimation_result, meta, cached=False)
 
     # ------------------------------------------------------------------
     # Layer implementations (one private method per layer)
@@ -138,15 +143,16 @@ class EstimationService:
         """
         await check_input(request.transcript, openai_client=self._openai_client)
 
-    def _lookup_cache(self, request: EstimationRequest) -> EstimationResponse | None:
-        """Layer 2 (read) — return a cached response for semantically similar input.
+    def _lookup_cache(self, request: EstimationRequest) -> "EstimationResult | None":
+        """Layer 2 (read) — return a cached result for semantically similar input.
 
-        Uses cosine similarity over transcript embeddings. Returns ``None`` on a
-        cache miss so the pipeline continues to Layer 3.
-
-        TODO: wire in an actual vector store (e.g. Redis + pgvector / Qdrant).
+        Returns ``None`` on a cache miss or when no cache is configured.
         """
-        return self._cache.lookup(request)  # type: ignore[return-value]
+        if self._cache is None:
+            return None
+        from src.schemas.estimation import EstimationResult
+        result = self._cache.lookup(request)
+        return result if isinstance(result, EstimationResult) else None
 
     def _render_prompts(self, request: EstimationRequest) -> tuple[str, str]:
         """Layer 3 — render Jinja2 templates into (system_prompt, user_prompt).
@@ -164,29 +170,36 @@ class EstimationService:
         user_prompt: str,
         request: EstimationRequest,
     ) -> tuple:
-        """Layer 4 — call the LLM and parse a structured ``EstimationResult``.
+        """Layer 4 — validate provider, call the LLM, return (EstimationResult, meta).
 
-        Uses ``LLMWrapper.complete_structured()`` which wraps
-        ``instructor.from_litellm(litellm.completion)`` — no provider lock-in.
-        Instructor retries up to ``max_retries=3`` times if the LLM output
-        fails the ``@model_validator`` arithmetic consistency checks.
-
-        Returns:
-            ``(EstimationResult, meta_dict)`` where ``meta_dict`` contains
-            ``model``, ``provider``, ``input_tokens``, ``output_tokens``, and
-            ``latency_ms``.
+        Delegates to ``generate_estimation`` which handles provider routing and
+        structured output parsing via Instructor.  The rendered prompts from
+        Layer 3 are passed as overrides so the pipeline's Jinja2 templates are
+        actually used for the LLM call.
 
         Raises:
+            UnknownProviderError: For unsupported provider names (before any LLM call).
             InstructorRetryException: If all retries are exhausted.
         """
-        from src.schemas.estimation import EstimationResult
+        from src.core.exceptions import UnknownProviderError
+        from src.services.llm_service import generate_estimation
 
-        return await get_llm_wrapper().complete_structured(
-            system_prompt=system_prompt,
-            user_message=user_prompt,
-            response_model=EstimationResult,
-            model_override=None,  # TODO: resolve from request.provider
+        if request.provider is not None and request.provider not in ("openai", "anthropic"):
+            raise UnknownProviderError(
+                f"Unsupported provider: '{request.provider}'. Use 'openai' or 'anthropic'."
+            )
+
+        result_dict = await generate_estimation(
+            transcript=request.transcript,
+            provider_override=request.provider,
         )
+        meta = {
+            "provider": result_dict["provider"],
+            "model": result_dict["model"],
+            "input_tokens": result_dict["usage"].input_tokens,
+            "output_tokens": result_dict["usage"].output_tokens,
+        }
+        return result_dict["estimation_result"], meta
 
     def _run_output_guardrails(self, estimation_result):
         """Layer 5a — enforce business rules on the structured LLM response.
@@ -201,17 +214,15 @@ class EstimationService:
         return enforce_scope_response(estimation_result)
 
     def _store_cache(self, request: EstimationRequest, estimation_result) -> None:
-        """Layer 5b — persist the result for future semantically-similar requests.
-
-        TODO: wire in the same vector store used by ``_lookup_cache``.
-        """
+        """Layer 5b — persist the result for future semantically-similar requests."""
+        if self._cache is None:
+            return
         self._cache.store(request, estimation_result)
 
-    def _build_response(self, estimation_result, meta: dict) -> EstimationResponse:
-        """Assemble the final ``EstimationResponse`` from the LLM result and metadata.
-
-        TODO: move cost calculation here (currently lives in llm_service.py).
-        """
+    def _build_response(
+        self, estimation_result, meta: dict, *, cached: bool = False, prompt_version: str = "v1"
+    ) -> EstimationResponse:
+        """Assemble the final ``EstimationResponse`` from the LLM result and metadata."""
         from src.schemas.estimation import UsageCost
         from src.services.pricing import calculate_cost
 
@@ -228,4 +239,6 @@ class EstimationService:
                 total_tokens=meta["input_tokens"] + meta["output_tokens"],
                 cost_usd=cost_usd,
             ),
+            cached=cached,
+            prompt_version=prompt_version,
         )
