@@ -1,3 +1,5 @@
+from enum import Enum
+
 from pydantic import BaseModel, Field, model_validator
 
 # ---------------------------------------------------------------------------
@@ -45,7 +47,7 @@ class OutputFormat(str, Enum):
 class EstimationRequest(BaseModel):
     """Payload sent by the client to request a software estimation."""
 
-    description: str = Field(
+    transcript: str = Field(
         ...,
         min_length=20,
         max_length=2000,
@@ -54,13 +56,16 @@ class EstimationRequest(BaseModel):
             "The client wants a web app where users can upload CSV files and visualise the data as interactive charts. The backend should store the files in S3 and expose a REST API."
         ],
     )
-    project_type: ProjectType = Field(
+    project_type: ProjectType | None = Field(
+        default=None,
         description="Category of the project being estimated.",
     )
-    detail_level: DetailLevel = Field(
+    detail_level: DetailLevel | None = Field(
+        default=None,
         description="How granular the estimation breakdown should be.",
     )
-    output_format: OutputFormat = Field(
+    output_format: OutputFormat | None = Field(
+        default=None,
         description="The structure of the estimation output.",
     )
     reference_projects: list[ReferenceProject] | None = Field(
@@ -79,21 +84,6 @@ class EstimationRequest(BaseModel):
                 }
             ]
         ],
-    )
-    project_type: str | None = Field(
-        default=None,
-        description="Type of project (e.g. 'saas', 'mobile', 'web_saas'). Used to specialise the prompt.",
-        examples=["saas", "web_saas", "mobile"],
-    )
-    detail_level: str | None = Field(
-        default=None,
-        description="Granularity of the estimate: 'summary', 'medium', or 'detailed'.",
-        examples=["summary", "medium", "detailed"],
-    )
-    output_format: str | None = Field(
-        default=None,
-        description="How to present phases: 'phases_table', 'line_items', or 'narrative'.",
-        examples=["phases_table", "line_items", "narrative"],
     )
 
 
@@ -290,9 +280,6 @@ class EstimationResponse(BaseModel):
 
     estimation: EstimationResult = Field(
         description="Structured software effort estimation produced by the LLM."
-    )
-    prompt_version: str = Field(
-        description="Version identifier of the system prompt used to generate this estimation."
     )
     provider_used: str = Field(
         description="The LLM provider that generated this estimation."

@@ -21,7 +21,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from jinja2 import Environment, FileSystemLoader, StrictUndefined
+from jinja2 import Environment, FileSystemLoader, StrictUndefined, TemplateNotFound
 
 from src.schemas.estimation import EstimationRequest
 
@@ -38,8 +38,25 @@ _env = Environment(
 )
 
 
+def _infer_prompt_style(model: str | None) -> str:
+    """Infer whether to use XML or Markdown prompt style based on the model name.
+
+    Claude models prefer XML-structured prompts; all other models default to
+    Markdown.
+
+    Returns:
+        ``"xml"`` for Anthropic/Claude models, ``"markdown"`` otherwise.
+    """
+    if model and "claude" in model.lower():
+        return "xml"
+    return "markdown"
+
+
 def render_estimation_prompt(
-    request: EstimationRequest, version: str = "v1"
+    request: EstimationRequest,
+    version: str = "v1",
+    model: str | None = None,
+    prompt_style: str | None = None,
 ) -> tuple[str, str]:
     """Render the system and user prompts for the given request.
 
@@ -59,11 +76,24 @@ def render_estimation_prompt(
 
     ctx = {
         "description": request.transcript,
+        "transcript": request.transcript,
         "project_type": _val("project_type", "saas"),
         "detail_level": _val("detail_level", "medium"),
         "output_format": _val("output_format", "phases_table"),
+        "prompt_style": prompt_style or _infer_prompt_style(model),
+        "reference_projects": getattr(request, "reference_projects", None) or [],
     }
 
-    system = _env.get_template(f"estimation/{version}/system.j2").render(**ctx)
-    user = _env.get_template(f"estimation/{version}/user.j2").render(**ctx)
+    try:
+        system = _env.get_template(f"estimation/{version}/system.j2").render(**ctx)
+        user = _env.get_template(f"estimation/{version}/user.j2").render(**ctx)
+    except TemplateNotFound:
+        available = sorted(
+            p.name
+            for p in (_TEMPLATES_DIR / "estimation").iterdir()
+            if p.is_dir()
+        )
+        raise ValueError(
+            f"Unknown prompt version '{version}'. Available versions: {available}"
+        )
     return system, user

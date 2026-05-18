@@ -3,7 +3,7 @@
 import json
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 from fastapi.responses import StreamingResponse
 
 from src.dependencies import get_estimation_service
@@ -29,6 +29,7 @@ router = APIRouter(prefix="/api/v1", tags=["Estimation"])
 )
 async def estimate(
     request: EstimationRequest,
+    prompt_version: Annotated[str, Query(pattern=r"^v[0-9]+$")] = "v1",
     service: EstimationService = Depends(get_estimation_service),
 ) -> EstimationResponse:
     """POST /api/v1/estimate

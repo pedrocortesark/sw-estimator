@@ -23,7 +23,7 @@ from src.schemas.estimation import (
 # ---------------------------------------------------------------------------
 
 _REQ = EstimationRequest(
-    description="A simple task management web app with projects, tasks, and user roles.",
+    transcript="A simple task management web app with projects, tasks, and user roles.",
     project_type=ProjectType.WEB_SAAS,
     detail_level=DetailLevel.MEDIUM,
     output_format=OutputFormat.PHASES_TABLE,
@@ -97,7 +97,7 @@ async def test_estimate_endpoint_accepts_prompt_version_v1(client):
     response = await client.post(
         "/api/v1/estimate?prompt_version=v1",
         json={
-            "description": "A simple task management web app with projects and tasks.",
+            "transcript": "A simple task management web app with projects and tasks.",
             "project_type": "web_saas",
             "detail_level": "medium",
             "output_format": "phases_table",
@@ -112,7 +112,7 @@ async def test_estimate_endpoint_accepts_prompt_version_v2(client):
     response = await client.post(
         "/api/v1/estimate?prompt_version=v2",
         json={
-            "description": "A simple task management web app with projects and tasks.",
+            "transcript": "A simple task management web app with projects and tasks.",
             "project_type": "web_saas",
             "detail_level": "medium",
             "output_format": "phases_table",
@@ -127,7 +127,7 @@ async def test_estimate_endpoint_rejects_invalid_prompt_version(client):
     response = await client.post(
         "/api/v1/estimate?prompt_version=foo",
         json={
-            "description": "A simple task management web app with projects and tasks.",
+            "transcript": "A simple task management web app with projects and tasks.",
             "project_type": "web_saas",
             "detail_level": "medium",
             "output_format": "phases_table",

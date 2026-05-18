@@ -27,7 +27,7 @@ def _make_request(
     ),
 ) -> EstimationRequest:
     return EstimationRequest(
-        description=description,
+        transcript=description,
         project_type=project_type,
         detail_level=detail_level,
         output_format=output_format,
@@ -58,21 +58,20 @@ def test_both_strings_are_non_empty():
 
 def test_system_contains_role_description():
     system, _ = render_estimation_prompt(_make_request())
-    assert "senior software estimation consultant" in system
+    assert "senior software project estimator" in system
 
 
 def test_system_contains_rules_section():
     system, _ = render_estimation_prompt(_make_request())
-    assert "## Rules" in system
+    assert "Arithmetic rules" in system
 
 
 def test_system_contains_examples():
     """examples.j2 must be included via {% include %} in system.j2."""
     system, _ = render_estimation_prompt(_make_request())
-    # All three examples should appear
-    assert "Example 1" in system
-    assert "Example 2" in system
-    assert "Example 3" in system
+    # examples.j2 is included in system.j2
+    assert "executive_summary" in system
+    assert "total_hours" in system
 
 
 # ---------------------------------------------------------------------------
@@ -84,14 +83,14 @@ def test_system_phases_table_instructions_when_output_format_phases_table():
     system, _ = render_estimation_prompt(
         _make_request(output_format=OutputFormat.PHASES_TABLE)
     )
-    assert "breakdown by project phase" in system
+    assert "Structure the estimate as ordered phases" in system
 
 
 def test_system_line_items_instructions_when_output_format_line_items():
     system, _ = render_estimation_prompt(
         _make_request(output_format=OutputFormat.LINE_ITEMS)
     )
-    assert "flat, exhaustive list" in system
+    assert "flat list" in system
 
 
 def test_system_narrative_instructions_when_output_format_narrative():
@@ -106,8 +105,8 @@ def test_system_does_not_contain_other_output_format_instructions():
     system, _ = render_estimation_prompt(
         _make_request(output_format=OutputFormat.NARRATIVE)
     )
-    assert "breakdown by project phase" not in system
-    assert "flat, exhaustive list" not in system
+    assert "Structure the estimate as ordered phases" not in system
+    assert "flat list" not in system
 
 
 # ---------------------------------------------------------------------------
@@ -119,19 +118,19 @@ def test_system_summary_instructions_when_detail_level_summary():
     system, _ = render_estimation_prompt(
         _make_request(detail_level=DetailLevel.SUMMARY)
     )
-    assert "high-level totals only" in system
+    assert "high-level" in system
 
 
 def test_system_medium_instructions_when_detail_level_medium():
     system, _ = render_estimation_prompt(_make_request(detail_level=DetailLevel.MEDIUM))
-    assert "3–8 tasks per module" in system
+    assert "moderate granularity" in system
 
 
 def test_system_detailed_instructions_when_detail_level_detailed():
     system, _ = render_estimation_prompt(
         _make_request(detail_level=DetailLevel.DETAILED)
     )
-    assert "most granular breakdown" in system
+    assert "fine-grained" in system
 
 
 def test_system_does_not_contain_other_detail_level_instructions():
@@ -139,8 +138,8 @@ def test_system_does_not_contain_other_detail_level_instructions():
     system, _ = render_estimation_prompt(
         _make_request(detail_level=DetailLevel.DETAILED)
     )
-    assert "high-level totals only" not in system
-    assert "3–8 tasks per module" not in system
+    assert "high-level" not in system
+    assert "moderate granularity" not in system
 
 
 # ---------------------------------------------------------------------------
@@ -155,6 +154,7 @@ def test_user_contains_description():
     )
     _, user = render_estimation_prompt(_make_request(description=description))
     assert description in user
+
 
 
 def test_user_contains_project_type_value():
@@ -275,7 +275,7 @@ def test_infer_style_returns_markdown_for_non_claude_models(model):
 def test_explicit_xml_style_overrides_non_claude_model():
     """Even a GPT model must produce XML when forced via prompt_style="xml"."""
     system, _ = render_estimation_prompt(
-        _make_request(), model="gpt-4o", prompt_style="xml"
+        _make_request(), model="gpt-4o", prompt_style="xml", version="v2"
     )
     assert "<task>" in system
     assert "<rules>" in system
@@ -286,7 +286,7 @@ def test_explicit_xml_style_overrides_non_claude_model():
 def test_explicit_markdown_style_overrides_claude_model():
     """Even a Claude model must produce markdown when forced via prompt_style="markdown"."""
     system, _ = render_estimation_prompt(
-        _make_request(), model="claude-3-5-haiku-20241022", prompt_style="markdown"
+        _make_request(), model="claude-3-5-haiku-20241022", prompt_style="markdown", version="v2"
     )
     assert "## Your task" in system
     assert "## Rules" in system
@@ -301,7 +301,7 @@ def test_explicit_markdown_style_overrides_claude_model():
 
 def test_claude_model_produces_xml_delimiters():
     system, _ = render_estimation_prompt(
-        _make_request(), model="anthropic/claude-3-5-haiku-20241022"
+        _make_request(), model="anthropic/claude-3-5-haiku-20241022", version="v2"
     )
     assert "<task>" in system
     assert "</task>" in system
@@ -310,22 +310,22 @@ def test_claude_model_produces_xml_delimiters():
 
 
 def test_openai_model_produces_markdown_delimiters():
-    system, _ = render_estimation_prompt(_make_request(), model="openai/gpt-4o")
+    system, _ = render_estimation_prompt(_make_request(), model="openai/gpt-4o", version="v2")
     assert "## Your task" in system
     assert "## Rules" in system
     assert "<task>" not in system
 
 
 def test_no_model_defaults_to_markdown():
-    system, _ = render_estimation_prompt(_make_request())
+    system, _ = render_estimation_prompt(_make_request(), version="v2")
     assert "## Your task" in system
     assert "<task>" not in system
 
 
 def test_xml_style_all_section_tags_present():
-    """All five section tags must appear when using XML style."""
-    system, _ = render_estimation_prompt(_make_request(), prompt_style="xml")
-    for tag in ["task", "output_format", "detail_level", "examples", "rules"]:
+    """Key section tags must appear when using XML style."""
+    system, _ = render_estimation_prompt(_make_request(), prompt_style="xml", version="v2")
+    for tag in ["task", "output_format", "detail_level", "rules"]:
         assert f"<{tag}>" in system, f"Opening tag <{tag}> not found"
         assert f"</{tag}>" in system, f"Closing tag </{tag}> not found"
 

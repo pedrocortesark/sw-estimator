@@ -73,7 +73,7 @@ async def test_estimate_returns_200_with_valid_transcript(
 
     assert response.status_code == 200
     body = response.json()
-    assert "text" in body
+    assert "estimation" in body
     assert "prompt_version" in body
     assert "provider_used" in body
     assert "model_used" in body
@@ -107,7 +107,7 @@ async def test_estimate_returns_422_when_transcript_missing(client: AsyncClient)
 @pytest.mark.asyncio
 async def test_estimate_returns_422_when_description_too_short(client: AsyncClient):
     """Descriptions shorter than 20 characters must be rejected with 422."""
-    payload = {**VALID_PAYLOAD, "description": "too short"}
+    payload = {"transcript": "too short"}
     response = await client.post("/api/v1/estimate", json=payload)
     assert response.status_code == 422
 
@@ -119,7 +119,7 @@ async def test_estimate_returns_400_for_unknown_provider(client: AsyncClient, te
 
     class _BadProviderService:
         async def estimate(self, request):
-            raise UnknownProviderError(f"Unsupported provider: '{request.provider}'.")
+            raise UnknownProviderError("Unsupported provider: 'grok'.")
 
     test_app.dependency_overrides[get_estimation_service] = lambda: (
         _BadProviderService()

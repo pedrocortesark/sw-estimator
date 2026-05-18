@@ -17,12 +17,15 @@ from src.core.exceptions import (
     UnknownProviderError,
 )
 from src.core.logging import logger
-from src.schemas.estimation import EstimationResponse, EstimationResult, UsageCost
+from src.schemas.estimation import EstimationRequest, EstimationResponse, EstimationResult, UsageCost
 from src.services.llm_wrapper import get_llm_wrapper, get_router, stream_complete
 from src.services.pricing import calculate_cost
 
 PROMPT_VERSION = "v1"
 
+
+def _build_system_prompt() -> str:
+    """Build the system prompt with few-shot examples injected.
 
     This is the CAG step: all reference context travels in every request.
     The LLM receives both the instructions AND the examples in the system role,
