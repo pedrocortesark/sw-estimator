@@ -1,49 +1,21 @@
-"""LLM service — uses Instructor to call OpenAI/Anthropic and return structured EstimationResult.
+"""LLM service — builds prompts and delegates LLM calls to LLMWrapper.
 
 This module is responsible for:
 1. Building the system prompt with few-shot examples injected (CAG).
-2. Calling the configured provider via Instructor so the LLM fills EstimationResult directly.
-3. Returning a dict with the parsed result plus model/provider/usage metadata.
+2. Delegating structured calls to LLMWrapper.complete_structured (Instructor + LiteLLM).
+3. Delegating streaming calls to the LiteLLM Router (stream_complete).
 """
 
 from typing import AsyncGenerator
 
 import time
 
-import instructor
-from anthropic import (
-    AsyncAnthropic,
-    AuthenticationError as AnthropicAuthError,
-    RateLimitError as AnthropicRateLimitError,
-    BadRequestError as AnthropicBadRequestError,
-    APIConnectionError as AnthropicConnectionError,
-    InternalServerError as AnthropicInternalError,
-)
-from openai import (
-    AsyncOpenAI,
-    AuthenticationError as OpenAIAuthError,
-    RateLimitError as OpenAIRateLimitError,
-    BadRequestError as OpenAIBadRequestError,
-    APIConnectionError as OpenAIConnectionError,
-    InternalServerError as OpenAIInternalError,
-)
-
 from src.context.examples import ESTIMATION_EXAMPLES
 from src.core.config import get_settings
-from src.core.exceptions import (
-    ProviderAuthError,
-    ProviderBadRequestError,
-    ProviderConnectionError,
-    ProviderInternalError,
-    ProviderRateLimitError,
-    UnknownProviderError,
-)
+from src.core.exceptions import ProviderAuthError, ProviderRateLimitError
 from src.core.logging import logger
 from src.schemas.estimation import EstimationResponse, EstimationResult, UsageCost
-from src.services.llm_wrapper import (
-    stream_complete,
-    get_router,
-)  # kept for stream_estimation
+from src.services.llm_wrapper import get_llm_wrapper, get_router, stream_complete
 from src.services.pricing import calculate_cost
 
 
@@ -105,131 +77,48 @@ async def generate_estimation(
 ) -> dict:
     """Generate a structured software effort estimation from a meeting transcript.
 
-    Uses Instructor to call the configured LLM provider and parse the response
-    directly into an EstimationResult instance.
+    Delegates to LLMWrapper.complete_structured which uses
+    instructor.from_litellm(litellm.completion) — no direct SDK lock-in.
 
     Args:
         transcript: Raw text of the meeting transcription.
-        provider_override: Optional provider name ('openai' or 'anthropic').
-            When supplied, takes precedence over settings.llm_provider.
+        provider_override: 'openai' or 'anthropic'. Overrides settings.llm_provider.
 
     Returns:
-        dict with keys:
-            - estimation_result: EstimationResult instance filled by the LLM.
-            - model: model identifier returned by the provider.
-            - provider: provider name used ('openai' or 'anthropic').
-            - usage: UsageCost with token counts and estimated cost.
+        dict with keys: estimation_result, model, provider, usage (UsageCost).
     """
     settings = get_settings()
-    provider = provider_override or settings.llm_provider
+
+    # Resolve which model to use, honouring the per-request provider override.
+    if provider_override == "anthropic":
+        model = settings.anthropic_model
+    elif provider_override == "openai":
+        model = settings.openai_model
+    else:
+        model = None  # LLMWrapper will use its configured primary_model
 
     system_prompt = _build_system_prompt()
-    call_logger = logger.bind(endpoint="/estimate", provider=provider)
-    call_logger.info("llm_call_started")
-    start = time.time()
+    wrapper = get_llm_wrapper()
 
-    try:
-        if provider == "openai":
-            client = instructor.from_openai(
-                AsyncOpenAI(api_key=settings.openai_api_key)
-            )
-            (
-                estimation_result,
-                completion,
-            ) = await client.chat.completions.create_with_completion(
-                response_model=EstimationResult,
-                model=settings.openai_model,
-                temperature=0.2,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {
-                        "role": "user",
-                        "content": f"Meeting transcript:\n{transcript}",
-                    },
-                ],
-            )
-            model_used = completion.model
-            input_tokens = completion.usage.prompt_tokens
-            output_tokens = completion.usage.completion_tokens
+    estimation_result, meta = await wrapper.complete_structured(
+        system_prompt=system_prompt,
+        user_message=f"Meeting transcript:\n{transcript}",
+        response_model=EstimationResult,
+        model_override=model,
+    )
 
-        elif provider == "anthropic":
-            client = instructor.from_anthropic(
-                AsyncAnthropic(api_key=settings.anthropic_api_key)
-            )
-            (
-                estimation_result,
-                completion,
-            ) = await client.messages.create_with_completion(
-                response_model=EstimationResult,
-                model=settings.anthropic_model,
-                max_tokens=4096,
-                temperature=0.2,
-                system=system_prompt,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": f"Meeting transcript:\n{transcript}",
-                    },
-                ],
-            )
-            model_used = completion.model
-            input_tokens = completion.usage.input_tokens
-            output_tokens = completion.usage.output_tokens
-
-        else:
-            raise UnknownProviderError(
-                f"Unsupported provider: {provider!r}. Valid values are 'openai' and 'anthropic'."
-            )
-
-    except (OpenAIAuthError, AnthropicAuthError) as exc:
-        latency = round((time.time() - start) * 1000, 1)
-        call_logger.error("llm_call_failed", error_type="AuthError", latency_ms=latency)
-        raise ProviderAuthError(str(exc)) from exc
-    except (OpenAIRateLimitError, AnthropicRateLimitError) as exc:
-        latency = round((time.time() - start) * 1000, 1)
-        call_logger.warning(
-            "llm_call_failed", error_type="RateLimitError", latency_ms=latency
-        )
-        raise ProviderRateLimitError(str(exc)) from exc
-    except (OpenAIBadRequestError, AnthropicBadRequestError) as exc:
-        latency = round((time.time() - start) * 1000, 1)
-        call_logger.error(
-            "llm_call_failed", error_type="BadRequestError", latency_ms=latency
-        )
-        raise ProviderBadRequestError(str(exc)) from exc
-    except (OpenAIConnectionError, AnthropicConnectionError) as exc:
-        latency = round((time.time() - start) * 1000, 1)
-        call_logger.error(
-            "llm_call_failed", error_type="ConnectionError", latency_ms=latency
-        )
-        raise ProviderConnectionError(str(exc)) from exc
-    except (OpenAIInternalError, AnthropicInternalError) as exc:
-        latency = round((time.time() - start) * 1000, 1)
-        call_logger.error(
-            "llm_call_failed", error_type="InternalError", latency_ms=latency
-        )
-        raise ProviderInternalError(str(exc)) from exc
-
-    latency = round((time.time() - start) * 1000, 1)
-    cost_usd = calculate_cost(model_used, input_tokens, output_tokens)
-
-    call_logger.info(
-        "llm_call_completed",
-        model=model_used,
-        tokens_in=input_tokens,
-        tokens_out=output_tokens,
-        latency_ms=latency,
-        cost_usd=round(cost_usd, 6),
+    cost_usd = calculate_cost(
+        meta["model"], meta["input_tokens"], meta["output_tokens"]
     )
 
     return {
         "estimation_result": estimation_result,
-        "model": model_used,
-        "provider": provider,
+        "model": meta["model"],
+        "provider": meta["provider"],
         "usage": UsageCost(
-            input_tokens=input_tokens,
-            output_tokens=output_tokens,
-            total_tokens=input_tokens + output_tokens,
+            input_tokens=meta["input_tokens"],
+            output_tokens=meta["output_tokens"],
+            total_tokens=meta["input_tokens"] + meta["output_tokens"],
             cost_usd=cost_usd,
         ),
     }

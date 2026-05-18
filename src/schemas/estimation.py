@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class EstimationRequest(BaseModel):
@@ -55,6 +55,16 @@ class Task(BaseModel):
     )
 
 
+# Relative tolerance allowed between LLM-reported totals and computed sums.
+# 5 % covers normal rounding (hours to multiples of 4, costs to 2 decimal places).
+_TOLERANCE = 0.05
+
+
+def _pct_diff(reported: float, computed: float) -> float:
+    """Return the relative difference, guarded against division by zero."""
+    return abs(reported - computed) / max(abs(computed), 1.0)
+
+
 class Phase(BaseModel):
     """A logical phase or stage of the project (e.g. Discovery, Backend, QA)."""
 
@@ -70,6 +80,28 @@ class Phase(BaseModel):
     total_cost_usd: float = Field(
         description="Sum of costs in USD across all tasks in this phase."
     )
+
+    @model_validator(mode="after")
+    def check_phase_subtotals(self) -> "Phase":
+        """Verify that total_hours and total_cost_usd match the sum of tasks.
+
+        A 5 % tolerance is allowed to accommodate the LLM rounding hours to
+        multiples of 4 and costs to two decimal places.
+        """
+        computed_hours = sum(t.hours for t in self.tasks)
+        computed_cost = sum(t.cost_usd for t in self.tasks)
+
+        if _pct_diff(self.total_hours, computed_hours) > _TOLERANCE:
+            raise ValueError(
+                f"Phase '{self.name}': total_hours={self.total_hours} differs from "
+                f"sum of task hours={computed_hours:.2f} by more than {_TOLERANCE:.0%}."
+            )
+        if _pct_diff(self.total_cost_usd, computed_cost) > _TOLERANCE:
+            raise ValueError(
+                f"Phase '{self.name}': total_cost_usd={self.total_cost_usd} differs from "
+                f"sum of task costs={computed_cost:.2f} by more than {_TOLERANCE:.0%}."
+            )
+        return self
 
 
 class TeamMember(BaseModel):
@@ -124,6 +156,29 @@ class EstimationResult(BaseModel):
             "team composition works in parallel where possible."
         )
     )
+
+    @model_validator(mode="after")
+    def check_grand_totals(self) -> "EstimationResult":
+        """Verify that top-level totals match the sum of phase subtotals.
+
+        Because both totals are derived from the same phase list, any
+        inconsistency signals that the LLM hallucinated a number somewhere.
+        A 5 % tolerance is applied for the same rounding reasons as Phase.
+        """
+        computed_hours = sum(p.total_hours for p in self.phases)
+        computed_cost = sum(p.total_cost_usd for p in self.phases)
+
+        if _pct_diff(self.total_hours, computed_hours) > _TOLERANCE:
+            raise ValueError(
+                f"total_hours={self.total_hours} differs from sum of phase "
+                f"hours={computed_hours:.2f} by more than {_TOLERANCE:.0%}."
+            )
+        if _pct_diff(self.total_cost_usd, computed_cost) > _TOLERANCE:
+            raise ValueError(
+                f"total_cost_usd={self.total_cost_usd} differs from sum of phase "
+                f"costs={computed_cost:.2f} by more than {_TOLERANCE:.0%}."
+            )
+        return self
 
 
 # ---------------------------------------------------------------------------
