@@ -20,9 +20,46 @@ services:
     # APP_ENV=production hides /docs and /redoc endpoints.
     environment:
       - APP_ENV=production
+      - REDIS_URL=redis://redis:6379
 
     # Restart policy: restart the container automatically if it crashes.
     # "unless-stopped" means it restarts on failure but not if you stop it manually.
     restart: unless-stopped
     # docker compose respects the HEALTHCHECK defined in the Dockerfile.
     # You can check status with: docker compose ps
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  streamlit:
+    image: sw-estimator:latest # same image, different command
+    command: [ "streamlit", "run", "app/streamlit_app.py", "--server.port=8501", "--server.address=0.0.0.0", "--server.headless=true" ]
+    ports:
+      - "8501:8501"
+    env_file:
+      - .env
+    environment:
+      - ESTIMATOR_API_URL=http://api:8000 # internal docker network
+    restart: unless-stopped
+    depends_on:
+      - api
+
+  # Redis Stack includes RediSearch, which provides the FT.CREATE / FT.SEARCH
+  # commands required by the semantic cache's vector index.
+  # Vanilla redis:alpine does NOT include RediSearch and will fail with
+  # "ERR unknown command 'FT.CREATE'" when EstimationSemanticCache.create() runs.
+  redis:
+    image: redis/redis-stack-server:latest
+    ports:
+      - "6380:6379" # Redis Stack on host:6380 (6379 is taken by another Redis)
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  redis_data:

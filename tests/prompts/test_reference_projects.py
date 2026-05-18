@@ -24,7 +24,7 @@ from src.schemas.estimation import (
 # ---------------------------------------------------------------------------
 
 _BASE_REQ = dict(
-    description="A logistics platform for warehouse inventory tracking and QR-based check-in.",
+    transcript="A logistics platform for warehouse inventory tracking and QR-based check-in.",
     project_type=ProjectType.INTERNAL_TOOL,
     detail_level=DetailLevel.MEDIUM,
     output_format=OutputFormat.PHASES_TABLE,

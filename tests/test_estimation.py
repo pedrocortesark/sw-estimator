@@ -1,83 +1,105 @@
 """Tests for POST /api/v1/estimate."""
 
-from unittest.mock import AsyncMock, patch
-
 import pytest
 from httpx import AsyncClient
 
+from src.dependencies import get_estimation_service
 from src.schemas.estimation import (
-    DetailLevel,
     EstimationResponse,
-    OutputFormat,
-    ProjectType,
+    EstimationResult,
+    Phase,
+    Task,
+    TeamMember,
     UsageCost,
 )
 
-# A valid payload that passes all Pydantic validations
-VALID_PAYLOAD = {
-    "description": (
-        "The client wants a web app where users can upload CSV files "
-        "and visualise the data as interactive charts. The backend should "
-        "store the files in S3 and expose a REST API."
-    ),
-    "project_type": ProjectType.WEB_SAAS.value,
-    "detail_level": DetailLevel.MEDIUM.value,
-    "output_format": OutputFormat.PHASES_TABLE.value,
-}
+# A realistic transcript that passes the min_length=20 validation rule
+VALID_TRANSCRIPT = (
+    "The client wants a web app where users can upload CSV files "
+    "and visualise the data as interactive charts. The backend should "
+    "store the files in S3 and expose a REST API."
+)
 
-# The fake response our mock will return — deterministic, instant, free
-MOCK_RESPONSE = EstimationResponse(
-    text="## Estimation\n\n| Task | Hours |\n|---|---|\n| Backend | 40 |\n\n**Total: 40 hours**",
-    prompt_version="v1",
+# Minimal but schema-valid EstimationResult
+_MOCK_RESULT = EstimationResult(
+    executive_summary="Simple dashboard — 40 hours, two developers.",
+    phases=[
+        Phase(
+            name="Backend Development",
+            tasks=[Task(name="REST API", hours=40.0, cost_usd=4000.0)],
+            total_hours=40.0,
+            total_cost_usd=4000.0,
+        )
+    ],
+    total_hours=40.0,
+    total_cost_usd=4000.0,
+    team_composition=[TeamMember(role="Backend Engineer", count=1, dedication="100%")],
+    duration_weeks=2.0,
+)
+
+_MOCK_RESPONSE = EstimationResponse(
+    estimation=_MOCK_RESULT,
     provider_used="anthropic",
     model_used="claude-3-5-haiku-20241022",
     usage=UsageCost(
-        input_tokens=500,
-        output_tokens=200,
-        total_tokens=700,
-        cost_usd=0.000150,
+        input_tokens=500, output_tokens=200, total_tokens=700, cost_usd=0.000150
     ),
 )
 
 
+class _MockService:
+    async def estimate(self, request):
+        return _MOCK_RESPONSE
+
+
+class _FailingService:
+    async def estimate(self, request):
+        raise RuntimeError("LLM network timeout")
+
+
 @pytest.mark.asyncio
-async def test_estimate_returns_200_with_valid_payload(client: AsyncClient):
-    """A valid payload must return HTTP 200 and a well-shaped response."""
-    with patch(
-        "src.routers.estimation.generate_estimation",
-        new_callable=AsyncMock,
-        return_value=MOCK_RESPONSE,
-    ):
-        response = await client.post("/api/v1/estimate", json=VALID_PAYLOAD)
+async def test_estimate_returns_200_with_valid_transcript(
+    client: AsyncClient, test_app
+):
+    """A valid transcript must return HTTP 200 and a well-shaped response."""
+    test_app.dependency_overrides[get_estimation_service] = lambda: _MockService()
+    try:
+        response = await client.post(
+            "/api/v1/estimate",
+            json={"transcript": VALID_TRANSCRIPT},
+        )
+    finally:
+        test_app.dependency_overrides.pop(get_estimation_service, None)
 
     assert response.status_code == 200
     body = response.json()
-    assert "text" in body
+    assert "estimation" in body
     assert "prompt_version" in body
     assert "provider_used" in body
     assert "model_used" in body
 
 
 @pytest.mark.asyncio
-async def test_estimate_response_content(client: AsyncClient):
+async def test_estimate_response_content(client: AsyncClient, test_app):
     """The response body must match what the mocked service returns."""
-    with patch(
-        "src.routers.estimation.generate_estimation",
-        new_callable=AsyncMock,
-        return_value=MOCK_RESPONSE,
-    ):
-        response = await client.post("/api/v1/estimate", json=VALID_PAYLOAD)
+    test_app.dependency_overrides[get_estimation_service] = lambda: _MockService()
+    try:
+        response = await client.post(
+            "/api/v1/estimate",
+            json={"transcript": VALID_TRANSCRIPT},
+        )
+    finally:
+        test_app.dependency_overrides.pop(get_estimation_service, None)
 
     body = response.json()
     assert body["provider_used"] == "anthropic"
     assert body["model_used"] == "claude-3-5-haiku-20241022"
-    assert body["prompt_version"] == "v1"
-    assert "40 hours" in body["text"]
+    assert body["estimation"]["total_hours"] == 40.0
 
 
 @pytest.mark.asyncio
-async def test_estimate_returns_422_when_body_missing(client: AsyncClient):
-    """FastAPI must return 422 when the request body is empty."""
+async def test_estimate_returns_422_when_transcript_missing(client: AsyncClient):
+    """FastAPI must return 422 Unprocessable Entity when 'transcript' is absent."""
     response = await client.post("/api/v1/estimate", json={})
     assert response.status_code == 422
 
@@ -85,43 +107,44 @@ async def test_estimate_returns_422_when_body_missing(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_estimate_returns_422_when_description_too_short(client: AsyncClient):
     """Descriptions shorter than 20 characters must be rejected with 422."""
-    payload = {**VALID_PAYLOAD, "description": "too short"}
+    payload = {"transcript": "too short"}
     response = await client.post("/api/v1/estimate", json=payload)
     assert response.status_code == 422
 
 
 @pytest.mark.asyncio
-async def test_estimate_returns_422_with_invalid_project_type(client: AsyncClient):
-    """An unknown project_type enum value must return 422."""
-    payload = {**VALID_PAYLOAD, "project_type": "blockchain_nft"}
-    response = await client.post("/api/v1/estimate", json=payload)
-    assert response.status_code == 422
+async def test_estimate_returns_400_for_unknown_provider(client: AsyncClient, test_app):
+    """Requesting an unsupported provider name must return HTTP 400."""
+    from src.core.exceptions import UnknownProviderError
+
+    class _BadProviderService:
+        async def estimate(self, request):
+            raise UnknownProviderError("Unsupported provider: 'grok'.")
+
+    test_app.dependency_overrides[get_estimation_service] = lambda: (
+        _BadProviderService()
+    )
+    try:
+        response = await client.post(
+            "/api/v1/estimate",
+            json={"transcript": VALID_TRANSCRIPT, "provider": "grok"},
+        )
+    finally:
+        test_app.dependency_overrides.pop(get_estimation_service, None)
+
+    assert response.status_code == 400
 
 
 @pytest.mark.asyncio
-async def test_estimate_returns_422_with_invalid_detail_level(client: AsyncClient):
-    """An unknown detail_level enum value must return 422."""
-    payload = {**VALID_PAYLOAD, "detail_level": "ultra"}
-    response = await client.post("/api/v1/estimate", json=payload)
-    assert response.status_code == 422
-
-
-@pytest.mark.asyncio
-async def test_estimate_returns_422_with_invalid_output_format(client: AsyncClient):
-    """An unknown output_format enum value must return 422."""
-    payload = {**VALID_PAYLOAD, "output_format": "powerpoint"}
-    response = await client.post("/api/v1/estimate", json=payload)
-    assert response.status_code == 422
-
-
-@pytest.mark.asyncio
-async def test_estimate_returns_500_on_unexpected_error(client: AsyncClient):
-    """If the LLM service raises an unexpected exception, the router must return 500."""
-    with patch(
-        "src.routers.estimation.generate_estimation",
-        new_callable=AsyncMock,
-        side_effect=RuntimeError("LLM network timeout"),
-    ):
-        response = await client.post("/api/v1/estimate", json=VALID_PAYLOAD)
+async def test_estimate_returns_500_on_unexpected_error(client: AsyncClient, test_app):
+    """If the service raises an unexpected exception, the router must return 500."""
+    test_app.dependency_overrides[get_estimation_service] = lambda: _FailingService()
+    try:
+        response = await client.post(
+            "/api/v1/estimate",
+            json={"transcript": VALID_TRANSCRIPT},
+        )
+    finally:
+        test_app.dependency_overrides.pop(get_estimation_service, None)
 
     assert response.status_code == 500

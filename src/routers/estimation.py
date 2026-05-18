@@ -3,12 +3,13 @@
 import json
 from typing import Annotated
 
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, Depends, Query, status
 from fastapi.responses import StreamingResponse
 
+from src.dependencies import get_estimation_service
 from src.schemas.estimation import EstimationRequest, EstimationResponse
+from src.services.estimation import EstimationService
 from src.services.llm_service import (
-    generate_estimation,
     stream_estimation,
 )
 from src.prompts.loader import render_estimation_prompt
@@ -29,6 +30,7 @@ router = APIRouter(prefix="/api/v1", tags=["Estimation"])
 async def estimate(
     request: EstimationRequest,
     prompt_version: Annotated[str, Query(pattern=r"^v[0-9]+$")] = "v1",
+    service: EstimationService = Depends(get_estimation_service),
 ) -> EstimationResponse:
     """POST /api/v1/estimate
 
@@ -37,10 +39,11 @@ async def estimate(
     - Returns 422 if validation fails (missing fields, wrong types, etc.).
     - Serialises the returned EstimationResponse to JSON.
 
-    Domain exceptions (ProviderRateLimitError, ProviderAuthError, UnknownProviderError)
-    are handled globally by the exception handlers registered in main.py.
+    Domain exceptions are handled globally by the exception handlers registered
+    in main.py (InputGuardrailViolation → 400, InstructorRetryException → 502,
+    UnknownProviderError → 400, etc.).
     """
-    return await generate_estimation(request, prompt_version=prompt_version)
+    return await service.estimate(request)
 
 
 @router.post(

@@ -24,18 +24,33 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     api_base_url: str = "http://localhost:8000"
 
-    # --- LLM Router (LiteLLM) ---
+    # --- LLM Provider ---
+    # Which provider to use for Instructor-based structured calls.
+    # Can be overridden per-request via the EstimationRequest.provider field.
+    llm_provider: Literal["openai", "anthropic"] = "openai"
+
+    # Model names used when calling the provider SDKs directly via Instructor.
+    openai_model: str = "gpt-4o-mini"
+    anthropic_model: str = "claude-haiku-4-5-20251001"
+
+    # --- LLM Router (LiteLLM) — kept for streaming fallback ---
     # Lista de modelos en orden de prioridad, formato "proveedor/modelo".
-    # El Router intenta el primero; si falla, pasa al siguiente, y así sucesivamente.
-    # Desde .env: LLM_MODELS=["anthropic/claude-opus-4-5","anthropic/claude-haiku-4-5-20251001","openai/gpt-4o-mini"]
     llm_models: list[str] = [
         "anthropic/claude-haiku-4-5-20251001",
         "openai/gpt-4o-mini",
     ]
 
+    # --- Cache ---
+    # Set to a Redis Stack URL (e.g. redis://localhost:6379) to enable
+    # semantic caching.  Leave empty to use the in-process memory cache only.
+    redis_url: str = ""
+    # Minimum cosine similarity to consider two transcripts a semantic cache hit.
+    # Lower = more cache hits but higher risk of returning a wrong estimate.
+    # 0.85 catches phrasing variants (e.g. "Rhino.Compute" vs "Compute");
+    # raise toward 0.92 for stricter matching in production.
+    semantic_cache_threshold: float = 0.85
+
     # --- API Keys ---
-    # LiteLLM las lee automáticamente desde el entorno, pero las declaramos
-    # aquí para que pydantic-settings valide que existen en el .env.
     openai_api_key: str = ""
     anthropic_api_key: str = ""
 

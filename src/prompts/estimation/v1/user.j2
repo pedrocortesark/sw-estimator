@@ -1,10 +1,13 @@
-Project type: {{ project_type }}
-Detail level: {{ detail_level }}
-Output format: {{ output_format }}
+Please estimate the following software project based on this meeting transcript.
 
-{% if prompt_style == "xml" %}<project_description>{% else %}## Project description{% endif %}
-{{ description }}
-{% if prompt_style == "xml" %}</project_description>{% else %}---{% endif %}
+<transcript>
+{{ transcript }}
+</transcript>
+
+Project context:
+- Type: {{ project_type }}
+- Detail level requested: {{ detail_level }}
+- Output format requested: {{ output_format }}
 {% if reference_projects %}
 {% if prompt_style == "xml" %}<reference_projects>{% else %}## Reference projects{% endif %}
 The following past projects are provided as calibration anchors. Use their
@@ -15,3 +18,6 @@ actual hours to sanity-check your estimate, but do not blindly copy them.
 {% endfor %}
 {% if prompt_style == "xml" %}</reference_projects>{% else %}---{% endif %}
 {% endif %}
+Return a single JSON object that conforms to the EstimationResult schema described
+in the system prompt. Double-check all arithmetic before submitting — every total
+must match the sum of its children within ±5 %.

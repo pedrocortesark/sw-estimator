@@ -1,147 +1,152 @@
 # SW Estimator
 
-FastAPI service that generates software effort estimations using LLMs (OpenAI / Anthropic) via LiteLLM Router.  
-Includes a Streamlit UI (`streamlit_app.py`) for interactive use.
+Generador de estimaciones de software a partir de transcripciones de reuniones o descripciones de proyecto. Combina un pipeline de 5 capas (guardrails, caché semántico, renderizado de prompts, LLM estructurado, guardrails de salida) con una interfaz Streamlit y una API FastAPI.
 
----
+## Arquitectura
+
+```
+Streamlit (puerto 8501)
+    │  HTTP
+    ▼
+FastAPI (puerto 8000)
+    │
+    ├── Layer 1 · Input guardrails (inyección, PII, moderación)
+    ├── Layer 2 · Semantic cache (Redis Stack + text-embedding-3-small)
+    ├── Layer 3 · Prompt rendering (Jinja2)
+    ├── Layer 4 · LLM call (Instructor + LiteLLM → OpenAI / Anthropic)
+    └── Layer 5 · Output guardrails + cache write
+        │
+        ▼
+    Redis Stack (puerto 6380)
+```
 
 ## Requisitos
 
-- Python 3.12+
-- API key de OpenAI y/o Anthropic en un fichero `.env`:
+- Python 3.13+
+- [uv](https://docs.astral.sh/uv/)
+- Docker Desktop (para Redis Stack)
 
-```env
+## Configuración
+
+Copia `.env` y rellena las claves:
+
+```bash
+# .env
+LLM_PROVIDER=anthropic          # openai | anthropic
+
 OPENAI_API_KEY=sk-...
+OPENAI_MODEL=gpt-4o-mini
+
 ANTHROPIC_API_KEY=sk-ant-...
+ANTHROPIC_MODEL=claude-haiku-4-5-20251001
+
+REDIS_URL=redis://localhost:6380         # Redis Stack local
+SEMANTIC_CACHE_THRESHOLD=0.85            # similitud coseno mínima para hit
 ```
 
----
+## Arrancar (desarrollo)
 
-## Levantar el servicio
+```bash
+./dev.sh
+```
 
-### Con Docker Compose (recomendado)
+Arranca los tres servicios en orden:
+
+| Servicio | URL |
+|---|---|
+| Streamlit (frontend) | http://localhost:8501 |
+| FastAPI (backend) | http://localhost:8000 |
+| Redis Stack (caché) | localhost:6380 |
+
+Los logs se guardan en `logs/api.log` y `logs/streamlit.log`.
+
+### Arranque manual (alternativo)
+
+Si ya tienes Redis corriendo:
+
+```bash
+# Terminal 1 — backend
+uv run uvicorn src.main:app --reload
+
+# Terminal 2 — frontend
+ESTIMATOR_API_URL=http://localhost:8000 uv run streamlit run app/streamlit_app.py
+```
+
+## Parar
+
+```bash
+./dev.sh stop          # para uvicorn + streamlit + Redis Stack
+```
+
+O si arrancaste manualmente:
+
+```bash
+# Ctrl-C en cada terminal
+docker compose stop redis
+```
+
+## Comandos útiles
+
+```bash
+# Ver estado de Redis
+docker compose ps
+
+# Logs en tiempo real
+tail -f logs/api.log
+tail -f logs/streamlit.log
+
+# Tests
+uv run pytest -v
+
+# Documentación interactiva de la API (solo en development)
+open http://localhost:8000/docs
+```
+
+## Producción (Docker Compose completo)
+
+Requiere Docker Desktop con integración WSL activa:
 
 ```bash
 docker compose up --build
 ```
 
-API disponible en `http://localhost:8000`.  
-Docs interactivos en `http://localhost:8000/docs`.
+Levanta `api` + `streamlit` + `redis` en contenedores. Streamlit se comunica con la API via red interna Docker (`http://api:8000`).
 
-### En local (desarrollo)
+## Caché
 
-```bash
-python -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"
-uvicorn src.main:app --reload --port 8000
-```
+| Tipo | Tecnología | Cuando aplica |
+|---|---|---|
+| Exacto | Dict SHA-256 en proceso | Transcripción idéntica |
+| Semántico | Redis Stack + OpenAI embeddings | Transcripciones similares (similitud ≥ `SEMANTIC_CACHE_THRESHOLD`) |
 
-### Interfaz Streamlit
+El caché semántico requiere Redis Stack y `OPENAI_API_KEY` (para generar embeddings con `text-embedding-3-small`). Sin Redis, el sistema usa solo el caché exacto en memoria.
 
-```bash
-streamlit run streamlit_app.py
-```
+La segunda llamada con el mismo (o similar) input devuelve `cached: true` en la respuesta y se sirve en milisegundos.
 
-Abre automáticamente en `http://localhost:8501`.
-
----
-
-## API
-
-| Método | Ruta | Descripción |
-|--------|------|-------------|
-| `GET` | `/health` | Health check |
-| `POST` | `/estimate` | Estimación completa (JSON) |
-| `POST` | `/estimate/stream` | Estimación en streaming (SSE) |
-
-### Query param `?prompt_version`
-
-Permite seleccionar la versión del prompt Jinja2:
+## Estructura del proyecto
 
 ```
-POST /estimate?prompt_version=v1   # few-shot con ejemplos (por defecto)
-POST /estimate?prompt_version=v2   # zero-shot con chain-of-thought
+src/
+├── cache/semantic.py        # Layer 2 — semantic cache (redisvl)
+├── guardrails/
+│   ├── input.py             # Layer 1 — prompt injection, PII, moderation
+│   └── output.py            # Layer 5 — out-of-scope enforcement
+├── prompts/
+│   ├── loader.py            # Layer 3 — Jinja2 render
+│   └── estimation/v1/       # Templates: system.j2, user.j2, examples.j2
+├── services/
+│   ├── estimation.py        # Pipeline orchestrator
+│   ├── llm_wrapper.py       # Instructor + LiteLLM
+│   └── pricing.py           # Cost calculation
+├── schemas/estimation.py    # Pydantic models (request / response)
+├── routers/estimation.py    # POST /api/v1/estimate
+├── dependencies.py          # FastAPI DI — wires Redis cache
+└── core/
+    ├── config.py            # Settings (pydantic-settings)
+    └── exceptions.py        # HTTP error handlers
+app/
+└── streamlit_app.py         # Streamlit frontend
+tests/                       # 83 tests (pytest-asyncio)
+dev.sh                       # Script de arranque local
+docker-compose.yml           # Redis Stack + API + Streamlit
 ```
-
-Versiones disponibles: `v1`, `v2`. Patrón validado: `^v[0-9]+$`.
-
-### Ejemplo de petición con `reference_projects`
-
-```json
-POST /estimate
-{
-  "description": "Portal de gestión de reservas para cadena hotelera con integración de pagos.",
-  "project_type": "web",
-  "detail_level": "detailed",
-  "output_format": "markdown",
-  "reference_projects": [
-    {
-      "name": "BookingLite",
-      "description": "Sistema de reservas para hotel boutique",
-      "total_hours": 420,
-      "notes": "Sin integración de pagos"
-    }
-  ]
-}
-```
-
----
-
-## Ejecutar los tests
-
-```bash
-# Todos los tests (excluye los que llaman al LLM real)
-pytest tests/ --ignore=tests/prompts/test_versioning.py -q
-
-# Suite completa (requiere API keys válidas, ~60 s)
-pytest tests/ -q
-
-# Solo tests de API
-pytest tests/api/ -q
-
-# Solo tests de prompts
-pytest tests/prompts/ -q
-```
-
-### Estructura de tests
-
-```
-tests/
-├── conftest.py                         # Fixture AsyncClient
-├── api/
-│   ├── test_estimation.py              # Endpoints /estimate
-│   └── test_health.py                  # Endpoint /health
-└── prompts/
-    ├── test_prompt_loader.py           # render_estimation_prompt()
-    ├── test_estimation_v1.py           # Templates v1 (Parte 4)
-    ├── test_versioning.py              # Versionado v1/v2 + query param (Bonus 1)
-    └── test_reference_projects.py      # reference_projects en schema y template (Bonus 2)
-```
-
----
-
-## Demo
-
-![SW Estimator — interfaz Streamlit](docs/assets/sw-estimator.png)
-
-> Interfaz Streamlit: formulario con tipo de proyecto, nivel de detalle y formato de salida.  
-> El panel lateral muestra el contexto CAG inyectado y el system prompt activo.
-
----
-
-## Arquitectura de prompts
-
-Los prompts se renderizan con Jinja2 desde `src/prompts/estimation/<version>/`:
-
-```
-src/prompts/estimation/
-├── v1/
-│   ├── system.j2    # Few-shot con ejemplos, macros XML/Markdown
-│   ├── user.j2      # <project_description> + referencia a proyectos
-│   └── examples.j2  # 3 ejemplos inyectados (CAG)
-└── v2/
-    ├── system.j2    # Zero-shot + <chain_of_thought>
-    └── user.j2      # Idéntico a v1
-```
-
-El loader (`src/prompts/loader.py`) infiere el estilo (XML vs Markdown) a partir del modelo, valida la versión e imprime un evento `prompt_rendered` vía structlog con `version`, `content_hash`, `system_chars` y `user_chars`.

@@ -1,8 +1,16 @@
-from __future__ import annotations
-
 from enum import Enum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
+
+# ---------------------------------------------------------------------------
+# Pipeline-wide constants — imported by guardrails and prompt templates
+# ---------------------------------------------------------------------------
+
+#: Confidence percentage below which an estimate is considered out-of-scope.
+LOW_CONFIDENCE_THRESHOLD: float = 30.0
+
+#: Mandatory prefix for executive_summary when confidence is below threshold.
+OUT_OF_SCOPE_PREFIX = "Out of scope:"
 
 
 class ReferenceProject(BaseModel):
@@ -39,7 +47,7 @@ class OutputFormat(str, Enum):
 class EstimationRequest(BaseModel):
     """Payload sent by the client to request a software estimation."""
 
-    description: str = Field(
+    transcript: str = Field(
         ...,
         min_length=20,
         max_length=2000,
@@ -48,13 +56,16 @@ class EstimationRequest(BaseModel):
             "The client wants a web app where users can upload CSV files and visualise the data as interactive charts. The backend should store the files in S3 and expose a REST API."
         ],
     )
-    project_type: ProjectType = Field(
+    project_type: ProjectType | None = Field(
+        default=None,
         description="Category of the project being estimated.",
     )
-    detail_level: DetailLevel = Field(
+    detail_level: DetailLevel | None = Field(
+        default=None,
         description="How granular the estimation breakdown should be.",
     )
-    output_format: OutputFormat = Field(
+    output_format: OutputFormat | None = Field(
+        default=None,
         description="The structure of the estimation output.",
     )
     reference_projects: list[ReferenceProject] | None = Field(
@@ -87,18 +98,188 @@ class UsageCost(BaseModel):
     cost_usd: float = Field(description="Estimated cost in USD for this request.")
 
 
-class EstimationResponse(BaseModel):
-    """Response returned by the API after generating the estimation.
+# ---------------------------------------------------------------------------
+# Structured estimation models — used by Instructor to parse the LLM response
+# ---------------------------------------------------------------------------
 
-    The estimation is returned as a Markdown-formatted string, ready to be
-    rendered by any frontend or consumed as plain text.
+
+class Task(BaseModel):
+    """A single unit of work within a project phase."""
+
+    name: str = Field(
+        description="Short, descriptive name of the task (e.g. 'Design database schema')."
+    )
+    hours: float = Field(
+        description="Estimated effort in hours required to complete this task."
+    )
+    cost_usd: float = Field(
+        description="Estimated cost in USD for this task, calculated as hours × hourly rate."
+    )
+
+
+# Relative tolerance allowed between LLM-reported totals and computed sums.
+# 5 % covers normal rounding (hours to multiples of 4, costs to 2 decimal places).
+_TOLERANCE = 0.05
+
+
+def _pct_diff(reported: float, computed: float) -> float:
+    """Return the relative difference, guarded against division by zero."""
+    return abs(reported - computed) / max(abs(computed), 1.0)
+
+
+class Phase(BaseModel):
+    """A logical phase or stage of the project (e.g. Discovery, Backend, QA)."""
+
+    name: str = Field(
+        description="Name of the project phase (e.g. 'Backend Development', 'QA & Testing')."
+    )
+    tasks: list[Task] = Field(
+        description="Ordered list of tasks that belong to this phase."
+    )
+    total_hours: float = Field(
+        description="Sum of hours across all tasks in this phase."
+    )
+    total_cost_usd: float = Field(
+        description="Sum of costs in USD across all tasks in this phase."
+    )
+
+    @model_validator(mode="after")
+    def check_phase_subtotals(self) -> "Phase":
+        """Verify that total_hours and total_cost_usd match the sum of tasks.
+
+        A 5 % tolerance is allowed to accommodate the LLM rounding hours to
+        multiples of 4 and costs to two decimal places.
+        """
+        computed_hours = sum(t.hours for t in self.tasks)
+        computed_cost = sum(t.cost_usd for t in self.tasks)
+
+        if _pct_diff(self.total_hours, computed_hours) > _TOLERANCE:
+            raise ValueError(
+                f"Phase '{self.name}': total_hours={self.total_hours} differs from "
+                f"sum of task hours={computed_hours:.2f} by more than {_TOLERANCE:.0%}."
+            )
+        if _pct_diff(self.total_cost_usd, computed_cost) > _TOLERANCE:
+            raise ValueError(
+                f"Phase '{self.name}': total_cost_usd={self.total_cost_usd} differs from "
+                f"sum of task costs={computed_cost:.2f} by more than {_TOLERANCE:.0%}."
+            )
+        return self
+
+
+class TeamMember(BaseModel):
+    """A role in the recommended team composition."""
+
+    role: str = Field(
+        description="Job title or role (e.g. 'Backend Engineer', 'UX Designer')."
+    )
+    count: int = Field(
+        description="Number of people with this role needed for the project."
+    )
+    dedication: str = Field(
+        description=(
+            "Expected time dedication for this role, expressed as a percentage or description "
+            "(e.g. '100%', '50% part-time', 'full-time for phases 1-3')."
+        )
+    )
+
+
+class EstimationResult(BaseModel):
+    """Structured software effort estimation produced directly by the LLM via Instructor.
+
+    This model is used as the response_model in Instructor calls. Every field
+    must be filled by the LLM; descriptions are included in the JSON Schema
+    sent to the model, so keep them precise and unambiguous.
     """
 
-    text: str = Field(
-        description="Software effort estimation in Markdown format, generated by the LLM."
+    executive_summary: str = Field(
+        description=(
+            "A concise executive summary (3-5 sentences) of the project scope, "
+            "main technical challenges, and the overall effort estimate."
+        )
     )
-    prompt_version: str = Field(
-        description="Version identifier of the system prompt used to generate this estimation."
+    phases: list[Phase] = Field(
+        description=(
+            "Ordered list of project phases. Cover the full delivery lifecycle: "
+            "e.g. Discovery, Design, Backend, Frontend, Integration, QA, Deployment."
+        )
+    )
+    total_hours: float = Field(
+        description="Grand total of estimated hours across all phases."
+    )
+    total_cost_usd: float = Field(
+        description="Grand total estimated cost in USD across all phases."
+    )
+    team_composition: list[TeamMember] = Field(
+        description="Recommended team composition listing each required role, headcount, and dedication."
+    )
+    duration_weeks: float = Field(
+        description=(
+            "Estimated calendar duration of the project in weeks, assuming the recommended "
+            "team composition works in parallel where possible."
+        )
+    )
+    confidence_pct: float = Field(
+        default=100.0,
+        ge=0.0,
+        le=100.0,
+        description=(
+            "Confidence percentage (0-100) in the accuracy of this estimate. "
+            f"Values below {LOW_CONFIDENCE_THRESHOLD} signal that the transcript is "
+            "out-of-scope or too vague to estimate reliably."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def check_confidence_prefix(self) -> "EstimationResult":
+        """Enforce that low-confidence results declare themselves in the summary.
+
+        Instructor treats a raised ``ValueError`` as a structured output failure
+        and re-prompts the LLM automatically, giving it a chance to correct the
+        response before the retry budget is exhausted.
+        """
+        if self.confidence_pct < LOW_CONFIDENCE_THRESHOLD:
+            if not self.executive_summary.startswith(OUT_OF_SCOPE_PREFIX):
+                raise ValueError(
+                    f"confidence_pct={self.confidence_pct} is below "
+                    f"{LOW_CONFIDENCE_THRESHOLD}; executive_summary must start "
+                    f"with '{OUT_OF_SCOPE_PREFIX}'."
+                )
+        return self
+
+    @model_validator(mode="after")
+    def check_grand_totals(self) -> "EstimationResult":
+        """Verify that top-level totals match the sum of phase subtotals.
+
+        Because both totals are derived from the same phase list, any
+        inconsistency signals that the LLM hallucinated a number somewhere.
+        A 5 % tolerance is applied for the same rounding reasons as Phase.
+        """
+        computed_hours = sum(p.total_hours for p in self.phases)
+        computed_cost = sum(p.total_cost_usd for p in self.phases)
+
+        if _pct_diff(self.total_hours, computed_hours) > _TOLERANCE:
+            raise ValueError(
+                f"total_hours={self.total_hours} differs from sum of phase "
+                f"hours={computed_hours:.2f} by more than {_TOLERANCE:.0%}."
+            )
+        if _pct_diff(self.total_cost_usd, computed_cost) > _TOLERANCE:
+            raise ValueError(
+                f"total_cost_usd={self.total_cost_usd} differs from sum of phase "
+                f"costs={computed_cost:.2f} by more than {_TOLERANCE:.0%}."
+            )
+        return self
+
+
+# ---------------------------------------------------------------------------
+# FastAPI response model — wraps EstimationResult with provider/model/usage
+# ---------------------------------------------------------------------------
+
+
+class EstimationResponse(BaseModel):
+    """Response returned by the API after generating the estimation."""
+
+    estimation: EstimationResult = Field(
+        description="Structured software effort estimation produced by the LLM."
     )
     provider_used: str = Field(
         description="The LLM provider that generated this estimation."
@@ -108,4 +289,12 @@ class EstimationResponse(BaseModel):
     )
     usage: UsageCost = Field(
         description="Token usage and estimated cost for this request."
+    )
+    cached: bool = Field(
+        default=False,
+        description="True when the response was served from the semantic cache.",
+    )
+    prompt_version: str = Field(
+        default="v1",
+        description="Version tag of the Jinja2 prompt templates used to generate this estimation.",
     )
