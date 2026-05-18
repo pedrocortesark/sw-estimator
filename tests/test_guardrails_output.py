@@ -40,7 +40,7 @@ from src.schemas.estimation import (
 # ---------------------------------------------------------------------------
 
 _HIGH_CONFIDENCE = LOW_CONFIDENCE_THRESHOLD + 10.0  # safely above threshold
-_LOW_CONFIDENCE = LOW_CONFIDENCE_THRESHOLD - 15.0   # safely below threshold
+_LOW_CONFIDENCE = LOW_CONFIDENCE_THRESHOLD - 15.0  # safely below threshold
 
 
 def _valid_phase() -> Phase:
@@ -57,13 +57,17 @@ def _valid_result(*, confidence_pct: float = _HIGH_CONFIDENCE) -> EstimationResu
         phases=[phase],
         total_hours=8.0,
         total_cost_usd=500.00,
-        team_composition=[TeamMember(role="Backend Engineer", count=1, dedication="100%")],
+        team_composition=[
+            TeamMember(role="Backend Engineer", count=1, dedication="100%")
+        ],
         duration_weeks=2.0,
         confidence_pct=confidence_pct,
     )
 
 
-def _out_of_scope_result(*, confidence_pct: float = _LOW_CONFIDENCE) -> EstimationResult:
+def _out_of_scope_result(
+    *, confidence_pct: float = _LOW_CONFIDENCE
+) -> EstimationResult:
     """Valid result where the summary already carries the required prefix."""
     phase = _valid_phase()
     return EstimationResult(
@@ -71,13 +75,17 @@ def _out_of_scope_result(*, confidence_pct: float = _LOW_CONFIDENCE) -> Estimati
         phases=[phase],
         total_hours=8.0,
         total_cost_usd=500.00,
-        team_composition=[TeamMember(role="Backend Engineer", count=1, dedication="100%")],
+        team_composition=[
+            TeamMember(role="Backend Engineer", count=1, dedication="100%")
+        ],
         duration_weeks=2.0,
         confidence_pct=confidence_pct,
     )
 
 
-def _low_confidence_no_prefix(*, confidence_pct: float = _LOW_CONFIDENCE) -> EstimationResult:
+def _low_confidence_no_prefix(
+    *, confidence_pct: float = _LOW_CONFIDENCE
+) -> EstimationResult:
     """EstimationResult with low confidence but missing the required prefix.
 
     Uses ``model_construct`` to bypass ``check_confidence_prefix``, producing
@@ -88,7 +96,9 @@ def _low_confidence_no_prefix(*, confidence_pct: float = _LOW_CONFIDENCE) -> Est
         phases=[_valid_phase()],
         total_hours=8.0,
         total_cost_usd=500.00,
-        team_composition=[TeamMember(role="Backend Engineer", count=1, dedication="100%")],
+        team_composition=[
+            TeamMember(role="Backend Engineer", count=1, dedication="100%")
+        ],
         duration_weeks=2.0,
         confidence_pct=confidence_pct,
     )

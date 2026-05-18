@@ -75,7 +75,9 @@ _FAKE_RESPONSE = EstimationResponse(
     estimation=_FAKE_RESULT,
     provider_used="openai",
     model_used="gpt-4o-mini",
-    usage=UsageCost(input_tokens=800, output_tokens=400, total_tokens=1200, cost_usd=0.001),
+    usage=UsageCost(
+        input_tokens=800, output_tokens=400, total_tokens=1200, cost_usd=0.001
+    ),
     cached=False,
     prompt_version="v1",
 )

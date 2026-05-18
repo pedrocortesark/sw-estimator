@@ -68,7 +68,13 @@ def enforce_scope_response(result: EstimationResult) -> EstimationResult:
 
     placeholder_phase = Phase(
         name="Not estimated",
-        tasks=[Task(name="Not enough information to size this project", hours=0.0, cost_usd=0.0)],
+        tasks=[
+            Task(
+                name="Not enough information to size this project",
+                hours=0.0,
+                cost_usd=0.0,
+            )
+        ],
         total_hours=0.0,
         total_cost_usd=0.0,
     )
@@ -82,4 +88,3 @@ def enforce_scope_response(result: EstimationResult) -> EstimationResult:
         duration_weeks=1.0,
         confidence_pct=result.confidence_pct,
     )
-

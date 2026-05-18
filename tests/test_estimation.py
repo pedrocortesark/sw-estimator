@@ -41,7 +41,9 @@ _MOCK_RESPONSE = EstimationResponse(
     estimation=_MOCK_RESULT,
     provider_used="anthropic",
     model_used="claude-3-5-haiku-20241022",
-    usage=UsageCost(input_tokens=500, output_tokens=200, total_tokens=700, cost_usd=0.000150),
+    usage=UsageCost(
+        input_tokens=500, output_tokens=200, total_tokens=700, cost_usd=0.000150
+    ),
 )
 
 
@@ -56,7 +58,9 @@ class _FailingService:
 
 
 @pytest.mark.asyncio
-async def test_estimate_returns_200_with_valid_transcript(client: AsyncClient, test_app):
+async def test_estimate_returns_200_with_valid_transcript(
+    client: AsyncClient, test_app
+):
     """A valid transcript must return HTTP 200 and a well-shaped response."""
     test_app.dependency_overrides[get_estimation_service] = lambda: _MockService()
     try:
@@ -118,7 +122,9 @@ async def test_estimate_returns_400_for_unknown_provider(client: AsyncClient, te
         async def estimate(self, request):
             raise UnknownProviderError(f"Unsupported provider: '{request.provider}'.")
 
-    test_app.dependency_overrides[get_estimation_service] = lambda: _BadProviderService()
+    test_app.dependency_overrides[get_estimation_service] = lambda: (
+        _BadProviderService()
+    )
     try:
         response = await client.post(
             "/api/v1/estimate",
@@ -143,4 +149,3 @@ async def test_estimate_returns_500_on_unexpected_error(client: AsyncClient, tes
         test_app.dependency_overrides.pop(get_estimation_service, None)
 
     assert response.status_code == 500
-

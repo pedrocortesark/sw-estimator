@@ -108,7 +108,12 @@ class EstimationService:
         if cached_result is not None:
             return self._build_response(
                 cached_result,
-                {"provider": "semantic_cache", "model": "cached", "input_tokens": 0, "output_tokens": 0},
+                {
+                    "provider": "semantic_cache",
+                    "model": "cached",
+                    "input_tokens": 0,
+                    "output_tokens": 0,
+                },
                 cached=True,
             )
 
@@ -151,6 +156,7 @@ class EstimationService:
         if self._cache is None:
             return None
         from src.schemas.estimation import EstimationResult
+
         result = self._cache.lookup(request)
         return result if isinstance(result, EstimationResult) else None
 
@@ -184,7 +190,10 @@ class EstimationService:
         from src.core.exceptions import UnknownProviderError
         from src.services.llm_service import generate_estimation
 
-        if request.provider is not None and request.provider not in ("openai", "anthropic"):
+        if request.provider is not None and request.provider not in (
+            "openai",
+            "anthropic",
+        ):
             raise UnknownProviderError(
                 f"Unsupported provider: '{request.provider}'. Use 'openai' or 'anthropic'."
             )
@@ -220,7 +229,12 @@ class EstimationService:
         self._cache.store(request, estimation_result)
 
     def _build_response(
-        self, estimation_result, meta: dict, *, cached: bool = False, prompt_version: str = "v1"
+        self,
+        estimation_result,
+        meta: dict,
+        *,
+        cached: bool = False,
+        prompt_version: str = "v1",
     ) -> EstimationResponse:
         """Assemble the final ``EstimationResponse`` from the LLM result and metadata."""
         from src.schemas.estimation import UsageCost

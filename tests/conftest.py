@@ -34,4 +34,3 @@ async def client(test_app) -> AsyncClient:
         base_url="http://test",
     ) as ac:
         yield ac
-
