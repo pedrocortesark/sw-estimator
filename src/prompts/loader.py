@@ -89,9 +89,7 @@ def render_estimation_prompt(
         user = _env.get_template(f"estimation/{version}/user.j2").render(**ctx)
     except TemplateNotFound:
         available = sorted(
-            p.name
-            for p in (_TEMPLATES_DIR / "estimation").iterdir()
-            if p.is_dir()
+            p.name for p in (_TEMPLATES_DIR / "estimation").iterdir() if p.is_dir()
         )
         raise ValueError(
             f"Unknown prompt version '{version}'. Available versions: {available}"

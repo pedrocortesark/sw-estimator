@@ -156,7 +156,6 @@ def test_user_contains_description():
     assert description in user
 
 
-
 def test_user_contains_project_type_value():
     _, user = render_estimation_prompt(
         _make_request(project_type=ProjectType.MOBILE_APP)
@@ -286,7 +285,10 @@ def test_explicit_xml_style_overrides_non_claude_model():
 def test_explicit_markdown_style_overrides_claude_model():
     """Even a Claude model must produce markdown when forced via prompt_style="markdown"."""
     system, _ = render_estimation_prompt(
-        _make_request(), model="claude-3-5-haiku-20241022", prompt_style="markdown", version="v2"
+        _make_request(),
+        model="claude-3-5-haiku-20241022",
+        prompt_style="markdown",
+        version="v2",
     )
     assert "## Your task" in system
     assert "## Rules" in system
@@ -310,7 +312,9 @@ def test_claude_model_produces_xml_delimiters():
 
 
 def test_openai_model_produces_markdown_delimiters():
-    system, _ = render_estimation_prompt(_make_request(), model="openai/gpt-4o", version="v2")
+    system, _ = render_estimation_prompt(
+        _make_request(), model="openai/gpt-4o", version="v2"
+    )
     assert "## Your task" in system
     assert "## Rules" in system
     assert "<task>" not in system
@@ -324,7 +328,9 @@ def test_no_model_defaults_to_markdown():
 
 def test_xml_style_all_section_tags_present():
     """Key section tags must appear when using XML style."""
-    system, _ = render_estimation_prompt(_make_request(), prompt_style="xml", version="v2")
+    system, _ = render_estimation_prompt(
+        _make_request(), prompt_style="xml", version="v2"
+    )
     for tag in ["task", "output_format", "detail_level", "rules"]:
         assert f"<{tag}>" in system, f"Opening tag <{tag}> not found"
         assert f"</{tag}>" in system, f"Closing tag </{tag}> not found"

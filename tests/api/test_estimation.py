@@ -156,4 +156,3 @@ async def test_estimate_returns_500_on_unexpected_error(client: AsyncClient, tes
         test_app.dependency_overrides.pop(get_estimation_service, None)
 
     assert response.status_code == 500
-
