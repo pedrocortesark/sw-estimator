@@ -18,7 +18,7 @@ from typing import Any, AsyncGenerator, TypeVar
 
 import instructor
 import litellm
-from instructor.exceptions import InstructorRetryException  # noqa: F401  (re-exported)
+from instructor.core import InstructorRetryException  # noqa: F401  (re-exported)
 from litellm import Router
 
 from src.core.config import get_settings

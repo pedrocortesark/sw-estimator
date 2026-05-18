@@ -5,7 +5,13 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from httpx import AsyncClient
 
-from src.schemas.estimation import EstimationResponse, UsageCost
+from src.schemas.estimation import (
+    EstimationResult,
+    Phase,
+    Task,
+    TeamMember,
+    UsageCost,
+)
 
 # A realistic transcript that passes the min_length=20 validation rule
 VALID_TRANSCRIPT = (
@@ -14,18 +20,36 @@ VALID_TRANSCRIPT = (
     "store the files in S3 and expose a REST API."
 )
 
-# The fake response our mock will return — deterministic, instant, free
-MOCK_RESPONSE = EstimationResponse(
-    estimation="## Estimation\n\n| Task | Hours |\n|---|---|\n| Backend | 40 |\n\n**Total: 40 hours**",
-    provider_used="anthropic",
-    model_used="claude-3-5-haiku-20241022",
-    usage=UsageCost(
+# Minimal but schema-valid EstimationResult
+_MOCK_RESULT = EstimationResult(
+    executive_summary="Simple dashboard — 40 hours, two developers.",
+    phases=[
+        Phase(
+            name="Backend Development",
+            tasks=[Task(name="REST API", hours=40.0, cost_usd=4000.0)],
+            total_hours=40.0,
+            total_cost_usd=4000.0,
+        )
+    ],
+    total_hours=40.0,
+    total_cost_usd=4000.0,
+    team_composition=[TeamMember(role="Backend Engineer", count=1, dedication="100%")],
+    duration_weeks=2.0,
+)
+
+# What generate_estimation() actually returns (a dict, not EstimationResponse)
+MOCK_GENERATE_RESULT = {
+    "estimation_result": _MOCK_RESULT,
+    "provider": "anthropic",
+    "model": "claude-3-5-haiku-20241022",
+    "usage": UsageCost(
         input_tokens=500,
         output_tokens=200,
         total_tokens=700,
         cost_usd=0.000150,
     ),
-)
+}
+
 
 
 @pytest.mark.asyncio
@@ -39,7 +63,7 @@ async def test_estimate_returns_200_with_valid_transcript(client: AsyncClient):
     with patch(
         "src.routers.estimation.generate_estimation",
         new_callable=AsyncMock,
-        return_value=MOCK_RESPONSE,
+        return_value=MOCK_GENERATE_RESULT,
     ):
         response = await client.post(
             "/api/v1/estimate",
@@ -59,7 +83,7 @@ async def test_estimate_response_content(client: AsyncClient):
     with patch(
         "src.routers.estimation.generate_estimation",
         new_callable=AsyncMock,
-        return_value=MOCK_RESPONSE,
+        return_value=MOCK_GENERATE_RESULT,
     ):
         response = await client.post(
             "/api/v1/estimate",
@@ -69,7 +93,7 @@ async def test_estimate_response_content(client: AsyncClient):
     body = response.json()
     assert body["provider_used"] == "anthropic"
     assert body["model_used"] == "claude-3-5-haiku-20241022"
-    assert "40 hours" in body["estimation"]
+    assert body["estimation"]["total_hours"] == 40.0
 
 
 @pytest.mark.asyncio
@@ -122,3 +146,4 @@ async def test_estimate_returns_500_on_unexpected_error(client: AsyncClient):
         )
 
     assert response.status_code == 500
+

@@ -5,6 +5,7 @@ description = "API REST que estima el esfuerzo de software a partir de transcrip
 requires-python = ">=3.12"
 dependencies = [
     "anthropic>=0.97.0",
+    "fakeredis>=2.35.1",
     "fastapi>=0.136.1",
     "httpx>=0.28.1",
     "instructor>=1.15.1",
@@ -13,6 +14,7 @@ dependencies = [
     "litellm>=1.83.0",
     "openai>=2.33.0",
     "pydantic-settings>=2.14.0",
+    "redis>=7.4.0",
     "streamlit>=1.57.0",
     "structlog>=25.5.0",
     "uvicorn[standard]>=0.46.0",

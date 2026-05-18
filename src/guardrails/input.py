@@ -148,4 +148,3 @@ async def check_input(
     _check_pii(description)
     if openai_client is not None:
         await _check_moderation(description, openai_client)
-
