@@ -10,8 +10,27 @@ import httpx
 import streamlit as st
 
 from src.core.config import get_settings
+from src.schemas.estimation import DetailLevel, OutputFormat, ProjectType
 
 API_BASE = get_settings().api_base_url
+
+# Human-readable labels for enum values shown in the form selects
+PROJECT_TYPE_LABELS = {
+    ProjectType.MOBILE_APP: "Mobile App",
+    ProjectType.WEB_SAAS: "Web SaaS",
+    ProjectType.INTERNAL_TOOL: "Internal Tool",
+    ProjectType.DATA_PIPELINE: "Data Pipeline",
+}
+DETAIL_LEVEL_LABELS = {
+    DetailLevel.SUMMARY: "Summary",
+    DetailLevel.MEDIUM: "Medium",
+    DetailLevel.DETAILED: "Detailed",
+}
+OUTPUT_FORMAT_LABELS = {
+    OutputFormat.PHASES_TABLE: "Phases Table",
+    OutputFormat.LINE_ITEMS: "Line Items",
+    OutputFormat.NARRATIVE: "Narrative",
+}
 
 
 def _get_system_prompt() -> str:
@@ -24,7 +43,7 @@ def _get_system_prompt() -> str:
         return f"Error al cargar el system prompt: {exc}"
 
 
-def http_stream_generator(transcript: str):
+def http_stream_generator(payload: dict):
     """Calls POST /api/v1/estimate/stream and yields text chunks.
 
     When the final [DONE] event arrives, stores the EstimationResponse
@@ -34,7 +53,7 @@ def http_stream_generator(transcript: str):
         with client.stream(
             "POST",
             f"{API_BASE}/api/v1/estimate/stream",
-            json={"transcript": transcript},
+            json=payload,
         ) as response:
             response.raise_for_status()
             for line in response.iter_lines():
@@ -45,7 +64,7 @@ def http_stream_generator(transcript: str):
                     metadata = json.loads(data[6:])
                     st.session_state.last_estimation_response = metadata
                 else:
-                    yield data
+                    yield data if data else "\n"
 
 
 def main():
@@ -72,6 +91,7 @@ def main():
         if "last_estimation_response" in st.session_state:
             resp = st.session_state.last_estimation_response
             st.metric("Modelo", resp["model_used"])
+            st.metric("Prompt Version", resp["prompt_version"])
             col1, col2 = st.columns(2)
             with col1:
                 st.metric("Input Tokens", resp["usage"]["input_tokens"])
@@ -83,32 +103,66 @@ def main():
 
     st.title("Generador de Estimaciones de Software")
     st.markdown(
-        "Pega aquí la transcripción de tu reunión para obtener una estimación usando CAG."
+        "Rellena el formulario para obtener una estimación de esfuerzo usando CAG."
     )
 
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
+    # --- FORM ---
+    with st.form("estimation_form"):
+        description = st.text_area(
+            "Descripción del proyecto",
+            placeholder="Describe el proyecto con suficiente detalle (mínimo 20 caracteres)...",
+            height=180,
+        )
 
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            project_type = st.selectbox(
+                "Tipo de proyecto",
+                options=list(PROJECT_TYPE_LABELS.keys()),
+                format_func=lambda x: PROJECT_TYPE_LABELS[x],
+            )
+        with col2:
+            detail_level = st.selectbox(
+                "Nivel de detalle",
+                options=list(DETAIL_LEVEL_LABELS.keys()),
+                format_func=lambda x: DETAIL_LEVEL_LABELS[x],
+            )
+        with col3:
+            output_format = st.selectbox(
+                "Formato de salida",
+                options=list(OUTPUT_FORMAT_LABELS.keys()),
+                format_func=lambda x: OUTPUT_FORMAT_LABELS[x],
+            )
 
-    if prompt := st.chat_input("Escribe o pega aquí la transcripción..."):
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(prompt)
+        submitted = st.form_submit_button(
+            "Generar estimación", use_container_width=True
+        )
 
-        with st.chat_message("assistant"):
+    # --- RESULT ---
+    if submitted:
+        if len(description.strip()) < 20:
+            st.warning("La descripción debe tener al menos 20 caracteres.")
+        else:
+            payload = {
+                "description": description,
+                "project_type": project_type.value,
+                "detail_level": detail_level.value,
+                "output_format": output_format.value,
+            }
+
+            st.divider()
+            st.subheader("Estimación generada")
             try:
-                estimation_text = st.write_stream(http_stream_generator(prompt))
-                st.session_state.messages.append(
-                    {"role": "assistant", "content": estimation_text}
-                )
+                placeholder = st.empty()
+                accumulated = ""
+                for chunk in http_stream_generator(payload):
+                    accumulated += chunk
+                    placeholder.markdown(accumulated)
+                placeholder.markdown(accumulated)
             except httpx.HTTPStatusError as e:
                 st.error(f"Error HTTP {e.response.status_code}: {e.response.text}")
             except httpx.RequestError as e:
                 st.error(f"No se pudo conectar con la API ({API_BASE}): {e}")
 
 
-if __name__ == "__main__":
-    main()
+main()

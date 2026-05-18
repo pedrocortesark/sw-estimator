@@ -73,7 +73,8 @@ async def test_estimate_returns_200_with_valid_transcript(
 
     assert response.status_code == 200
     body = response.json()
-    assert "estimation" in body
+    assert "text" in body
+    assert "prompt_version" in body
     assert "provider_used" in body
     assert "model_used" in body
 
@@ -104,12 +105,10 @@ async def test_estimate_returns_422_when_transcript_missing(client: AsyncClient)
 
 
 @pytest.mark.asyncio
-async def test_estimate_returns_422_when_transcript_too_short(client: AsyncClient):
-    """Transcripts shorter than 20 characters must be rejected with 422."""
-    response = await client.post(
-        "/api/v1/estimate",
-        json={"transcript": "too short"},
-    )
+async def test_estimate_returns_422_when_description_too_short(client: AsyncClient):
+    """Descriptions shorter than 20 characters must be rejected with 422."""
+    payload = {**VALID_PAYLOAD, "description": "too short"}
+    response = await client.post("/api/v1/estimate", json=payload)
     assert response.status_code == 422
 
 

@@ -11,27 +11,74 @@ LOW_CONFIDENCE_THRESHOLD: float = 30.0
 OUT_OF_SCOPE_PREFIX = "Out of scope:"
 
 
+class ReferenceProject(BaseModel):
+    """A past project used as calibration context for the estimation."""
+
+    name: str = Field(description="Short name or codename of the reference project.")
+    description: str = Field(description="What the project did in 1-2 sentences.")
+    total_hours: int = Field(description="Actual hours delivered on that project.")
+    notes: str | None = Field(
+        default=None,
+        description="Optional lessons learned or caveats that affect the comparison.",
+    )
+
+
+class ProjectType(str, Enum):
+    MOBILE_APP = "mobile_app"
+    WEB_SAAS = "web_saas"
+    INTERNAL_TOOL = "internal_tool"
+    DATA_PIPELINE = "data_pipeline"
+
+
+class DetailLevel(str, Enum):
+    SUMMARY = "summary"
+    MEDIUM = "medium"
+    DETAILED = "detailed"
+
+
+class OutputFormat(str, Enum):
+    PHASES_TABLE = "phases_table"
+    LINE_ITEMS = "line_items"
+    NARRATIVE = "narrative"
+
+
 class EstimationRequest(BaseModel):
-    """Payload sent by the client to request a software estimation.
+    """Payload sent by the client to request a software estimation."""
 
-    The client submits the raw text of a meeting transcription and,
-    optionally, which LLM provider to use for this specific request.
-    If no provider is specified, the one configured in Settings is used.
-    """
-
-    transcript: str = Field(
-        ...,  # '...' means required — no default value
+    description: str = Field(
+        ...,
         min_length=20,
-        max_length=10_000,
-        description="Raw text of the meeting transcription to estimate.",
+        max_length=2000,
+        description="Description of the software project to estimate.",
         examples=[
             "The client wants a web app where users can upload CSV files and visualise the data as interactive charts. The backend should store the files in S3 and expose a REST API."
         ],
     )
-    provider: str | None = Field(
+    project_type: ProjectType = Field(
+        description="Category of the project being estimated.",
+    )
+    detail_level: DetailLevel = Field(
+        description="How granular the estimation breakdown should be.",
+    )
+    output_format: OutputFormat = Field(
+        description="The structure of the estimation output.",
+    )
+    reference_projects: list[ReferenceProject] | None = Field(
         default=None,
-        description="LLM provider to use: 'openai' or 'anthropic'. Defaults to the value in Settings.",
-        examples=["openai", "anthropic"],
+        description=(
+            "Optional list of past similar projects used as calibration anchors. "
+            "When provided, the model will use them to ground its estimates."
+        ),
+        examples=[
+            [
+                {
+                    "name": "Acme CRM",
+                    "description": "Internal CRM for a 50-person sales team.",
+                    "total_hours": 320,
+                    "notes": "Heavy custom reporting added 40 h.",
+                }
+            ]
+        ],
     )
     project_type: str | None = Field(
         default=None,
@@ -243,6 +290,9 @@ class EstimationResponse(BaseModel):
 
     estimation: EstimationResult = Field(
         description="Structured software effort estimation produced by the LLM."
+    )
+    prompt_version: str = Field(
+        description="Version identifier of the system prompt used to generate this estimation."
     )
     provider_used: str = Field(
         description="The LLM provider that generated this estimation."

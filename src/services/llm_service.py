@@ -10,7 +10,6 @@ from typing import AsyncGenerator
 
 import time
 
-from src.context.examples import ESTIMATION_EXAMPLES
 from src.core.config import get_settings
 from src.core.exceptions import (
     ProviderAuthError,
@@ -22,9 +21,8 @@ from src.schemas.estimation import EstimationResponse, EstimationResult, UsageCo
 from src.services.llm_wrapper import get_llm_wrapper, get_router, stream_complete
 from src.services.pricing import calculate_cost
 
+PROMPT_VERSION = "v1"
 
-def _build_system_prompt() -> str:
-    """Build the system prompt with few-shot examples injected.
 
     This is the CAG step: all reference context travels in every request.
     The LLM receives both the instructions AND the examples in the system role,
@@ -133,7 +131,8 @@ async def generate_estimation(
 
 
 async def stream_estimation(
-    transcript: str,
+    request: EstimationRequest,
+    prompt_version: str = PROMPT_VERSION,
 ) -> AsyncGenerator[str | EstimationResponse, None]:
     """Generate a software effort estimation using streaming.
 
@@ -141,7 +140,12 @@ async def stream_estimation(
         Text chunks as they arrive from the model.
         The final yielded item is an EstimationResponse with full metadata.
     """
-    system_prompt = _build_system_prompt()
+    settings = get_settings()
+    primary_model = settings.llm_models[0] if settings.llm_models else "unknown"
+
+    system_prompt, user_message = render_estimation_prompt(
+        request, version=prompt_version, model=primary_model
+    )
 
     call_logger = logger.bind(endpoint="/estimate/stream", mode="stream")
     call_logger.info("llm_call_started", models=get_router().model_list)
@@ -149,7 +153,7 @@ async def stream_estimation(
 
     messages = [
         {"role": "system", "content": system_prompt},
-        {"role": "user", "content": f"Meeting transcript:\n{transcript}"},
+        {"role": "user", "content": user_message},
     ]
 
     full_text = ""
@@ -219,7 +223,8 @@ async def stream_estimation(
     )
 
     yield EstimationResponse(
-        estimation=full_text,
+        text=full_text,
+        prompt_version=prompt_version,
         provider_used=model_used.split("/")[0] if "/" in model_used else model_used,
         model_used=model_used,
         usage=UsageCost(

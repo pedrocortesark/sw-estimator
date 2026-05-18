@@ -1,6 +1,7 @@
 """Estimation router — handles POST /api/v1/estimate and POST /api/v1/estimate/stream."""
 
 import json
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, status
 from fastapi.responses import StreamingResponse
@@ -10,8 +11,8 @@ from src.schemas.estimation import EstimationRequest, EstimationResponse
 from src.services.estimation import EstimationService
 from src.services.llm_service import (
     stream_estimation,
-    _build_system_prompt,
 )
+from src.prompts.loader import render_estimation_prompt
 
 router = APIRouter(prefix="/api/v1", tags=["Estimation"])
 
@@ -54,11 +55,14 @@ async def estimate(
         "the full EstimationResponse metadata."
     ),
 )
-async def estimate_stream(request: EstimationRequest) -> StreamingResponse:
+async def estimate_stream(
+    request: EstimationRequest,
+    prompt_version: Annotated[str, Query(pattern=r"^v[0-9]+$")] = "v1",
+) -> StreamingResponse:
     """POST /api/v1/estimate/stream"""
 
     async def event_generator():
-        async for chunk in stream_estimation(transcript=request.transcript):
+        async for chunk in stream_estimation(request, prompt_version=prompt_version):
             if isinstance(chunk, str):
                 yield f"data: {chunk}\n\n"
             else:
@@ -75,4 +79,13 @@ async def estimate_stream(request: EstimationRequest) -> StreamingResponse:
 )
 async def get_context() -> dict:
     """GET /api/v1/context"""
-    return {"system_prompt": _build_system_prompt()}
+    from src.schemas.estimation import DetailLevel, OutputFormat, ProjectType
+
+    dummy = EstimationRequest(
+        description="Placeholder request used to render the active system prompt for inspection.",
+        project_type=ProjectType.WEB_SAAS,
+        detail_level=DetailLevel.MEDIUM,
+        output_format=OutputFormat.PHASES_TABLE,
+    )
+    system, _ = render_estimation_prompt(dummy)
+    return {"system_prompt": system}
