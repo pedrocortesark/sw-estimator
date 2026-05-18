@@ -7,6 +7,7 @@ in main.py translate them to the appropriate HTTP responses.
 
 from fastapi import Request, status
 from fastapi.responses import JSONResponse
+from instructor.exceptions import InstructorRetryException
 
 from src.core.logging import logger
 
@@ -114,6 +115,25 @@ def setup_exception_handlers(app) -> None:
         return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,
             content={"detail": str(exc)},
+        )
+
+    @app.exception_handler(InstructorRetryException)
+    async def instructor_retry_handler(
+        request: Request, exc: InstructorRetryException
+    ) -> JSONResponse:
+        logger.warning(
+            "instructor_retries_exhausted",
+            path=str(request.url.path),
+            attempts=getattr(exc, "n_attempts", "unknown"),
+        )
+        return JSONResponse(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            content={
+                "detail": (
+                    "The LLM could not produce a valid structured response after "
+                    "several attempts. Please rephrase the transcript or retry."
+                )
+            },
         )
 
     @app.exception_handler(EstimatorError)

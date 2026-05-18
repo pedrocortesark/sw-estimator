@@ -102,7 +102,7 @@ class LLMWrapper:
         user_message: str,
         response_model: type[T],
         model_override: str | None = None,
-        max_retries: int = 6,
+        max_retries: int = 3,
     ) -> tuple[T, dict]:
         """Call an LLM via Instructor + LiteLLM and return a validated Pydantic instance.
 
