@@ -228,9 +228,7 @@ def main() -> None:
                 st.error(f"Input rejected ({err.reason}): {err.message}")
                 return
             except UpstreamError:
-                st.error(
-                    "The estimation service is unavailable. Try again later."
-                )
+                st.error("The estimation service is unavailable. Try again later.")
                 return
             except httpx.TimeoutException:
                 st.error("Request timed out after 120s.")

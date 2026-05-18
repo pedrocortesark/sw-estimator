@@ -32,16 +32,14 @@ services:
         condition: service_healthy
 
   streamlit:
-    image: sw-estimator:latest  # same image, different command
-    command: ["streamlit", "run", "app/streamlit_app.py",
-              "--server.port=8501", "--server.address=0.0.0.0",
-              "--server.headless=true"]
+    image: sw-estimator:latest # same image, different command
+    command: [ "streamlit", "run", "app/streamlit_app.py", "--server.port=8501", "--server.address=0.0.0.0", "--server.headless=true" ]
     ports:
       - "8501:8501"
     env_file:
       - .env
     environment:
-      - ESTIMATOR_API_URL=http://api:8000  # internal docker network
+      - ESTIMATOR_API_URL=http://api:8000 # internal docker network
     restart: unless-stopped
     depends_on:
       - api

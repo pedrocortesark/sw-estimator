@@ -124,7 +124,9 @@ class EstimationService:
             return self._build_response(
                 cached_result,
                 {
-                    "provider": "memory_cache" if self._cache is None else "semantic_cache",
+                    "provider": "memory_cache"
+                    if self._cache is None
+                    else "semantic_cache",
                     "model": "cached",
                     "input_tokens": 0,
                     "output_tokens": 0,
