@@ -1,1 +1,14 @@
-{# User prompt for estimation v1 #}
+Please estimate the following software project based on this meeting transcript.
+
+<transcript>
+{{ description }}
+</transcript>
+
+Project context:
+- Type: {{ project_type }}
+- Detail level requested: {{ detail_level }}
+- Output format requested: {{ output_format }}
+
+Return a single JSON object that conforms to the EstimationResult schema described
+in the system prompt. Double-check all arithmetic before submitting — every total
+must match the sum of its children within ±5 %.

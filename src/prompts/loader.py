@@ -1,8 +1,41 @@
-"""Prompt template loader — renders Jinja2 templates into (system, user) prompt pairs."""
+"""Prompt template loader — renders Jinja2 templates into (system, user) prompt pairs.
+
+Design notes
+------------
+* ``FileSystemLoader`` points at this file's own directory so template paths are
+  always relative to the package, never to the caller's cwd.
+* ``StrictUndefined`` makes missing context variables raise ``UndefinedError`` at
+  render time rather than silently becoming empty strings — typos surface immediately.
+* ``trim_blocks`` removes the newline right after a ``{% ... %}`` tag so that
+  control-flow lines don't add blank rows to the rendered output.
+* ``lstrip_blocks`` strips leading spaces/tabs before ``{% %}`` tags, letting you
+  indent template logic for readability without those indents leaking into the
+  rendered string.
+* ``autoescape=False`` because prompts are plain text, not HTML — escaping
+  characters like ``<``, ``&`` or ``>`` would corrupt the rendered content.
+* ``keep_trailing_newline=True`` preserves the final newline in template files,
+  which avoids confusing diffs and matches UNIX conventions.
+"""
 
 from __future__ import annotations
 
+from pathlib import Path
+
+from jinja2 import Environment, FileSystemLoader, StrictUndefined
+
 from src.schemas.estimation import EstimationRequest
+
+# Root of all templates = the directory that contains this file.
+_TEMPLATES_DIR = Path(__file__).parent
+
+_env = Environment(
+    loader=FileSystemLoader(str(_TEMPLATES_DIR)),
+    undefined=StrictUndefined,
+    trim_blocks=True,
+    lstrip_blocks=True,
+    autoescape=False,
+    keep_trailing_newline=True,
+)
 
 
 def render_estimation_prompt(
@@ -17,4 +50,19 @@ def render_estimation_prompt(
     Returns:
         A ``(system_prompt, user_prompt)`` tuple.
     """
-    return ("", "")
+    # Build context; fields that don't exist yet on the model use safe defaults
+    # so old request objects remain compatible when new fields are added later.
+    def _val(field: str, default: str) -> str:
+        v = getattr(request, field, default)
+        return v.value if hasattr(v, "value") else str(v)
+
+    ctx = {
+        "description": request.transcript,
+        "project_type": _val("project_type", "saas"),
+        "detail_level": _val("detail_level", "medium"),
+        "output_format": _val("output_format", "phases_table"),
+    }
+
+    system = _env.get_template(f"estimation/{version}/system.j2").render(**ctx)
+    user = _env.get_template(f"estimation/{version}/user.j2").render(**ctx)
+    return system, user

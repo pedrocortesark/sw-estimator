@@ -1,0 +1,38 @@
+<examples>
+The following abbreviated example shows the expected JSON structure.
+Values are illustrative — use your own estimates for the actual transcript.
+
+{
+  "executive_summary": "The project involves building a SaaS web application with CSV upload, data visualisation, and S3 storage. The main challenges are secure file handling, chart rendering performance, and a well-documented REST API. Total estimated effort is 168 hours across 4 phases, deliverable in approximately 6 weeks with a two-person team.",
+  "phases": [
+    {
+      "name": "Discovery & Architecture",
+      "tasks": [
+        {"name": "Requirements workshop & user-story mapping", "hours": 8,  "cost_usd": 500.00},
+        {"name": "System architecture design",                 "hours": 6,  "cost_usd": 375.00},
+        {"name": "Tech stack selection & ADR",                 "hours": 4,  "cost_usd": 250.00}
+      ],
+      "total_hours": 18,
+      "total_cost_usd": 1125.00
+    },
+    {
+      "name": "Backend Development",
+      "tasks": [
+        {"name": "S3 file upload endpoint",                   "hours": 12, "cost_usd": 750.00},
+        {"name": "CSV parsing & validation service",          "hours": 16, "cost_usd": 1000.00},
+        {"name": "REST API for chart data",                   "hours": 20, "cost_usd": 1250.00},
+        {"name": "Authentication (JWT)",                      "hours": 12, "cost_usd": 750.00}
+      ],
+      "total_hours": 60,
+      "total_cost_usd": 3750.00
+    }
+  ],
+  "total_hours": 168,
+  "total_cost_usd": 10500.00,
+  "team_composition": [
+    {"role": "Backend Engineer", "count": 1, "dedication": "100%"},
+    {"role": "Frontend Engineer","count": 1, "dedication": "100%"}
+  ],
+  "duration_weeks": 6.0
+}
+</examples>
