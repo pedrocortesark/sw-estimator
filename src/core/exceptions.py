@@ -7,7 +7,7 @@ in main.py translate them to the appropriate HTTP responses.
 
 from fastapi import Request, status
 from fastapi.responses import JSONResponse
-from instructor.exceptions import InstructorRetryException
+from instructor.core import InstructorRetryException
 
 from src.core.logging import logger
 
