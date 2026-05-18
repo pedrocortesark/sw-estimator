@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from src.core.config import get_settings
 from src.core.exceptions import setup_exception_handlers
 from src.core.logging import logger, configure_logging
-from src.routers import health, estimation
+from src.routers import health, estimation, sessions
 
 
 @asynccontextmanager
@@ -52,6 +52,7 @@ def create_app() -> FastAPI:
     )
 
     app.include_router(health.router)
+    app.include_router(sessions.router)
     app.include_router(estimation.router)
 
     setup_exception_handlers(app)
