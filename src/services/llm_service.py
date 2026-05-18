@@ -12,7 +12,11 @@ import time
 
 from src.context.examples import ESTIMATION_EXAMPLES
 from src.core.config import get_settings
-from src.core.exceptions import ProviderAuthError, ProviderRateLimitError, UnknownProviderError
+from src.core.exceptions import (
+    ProviderAuthError,
+    ProviderRateLimitError,
+    UnknownProviderError,
+)
 from src.core.logging import logger
 from src.schemas.estimation import EstimationResponse, EstimationResult, UsageCost
 from src.services.llm_wrapper import get_llm_wrapper, get_router, stream_complete
@@ -97,7 +101,9 @@ async def generate_estimation(
     elif provider_override is None:
         model = None  # LLMWrapper will use its configured primary_model
     else:
-        raise UnknownProviderError(f"Unsupported provider: '{provider_override}'. Use 'openai' or 'anthropic'.")
+        raise UnknownProviderError(
+            f"Unsupported provider: '{provider_override}'. Use 'openai' or 'anthropic'."
+        )
 
     system_prompt = _build_system_prompt()
     wrapper = get_llm_wrapper()

@@ -51,7 +51,6 @@ MOCK_GENERATE_RESULT = {
 }
 
 
-
 @pytest.mark.asyncio
 async def test_estimate_returns_200_with_valid_transcript(client: AsyncClient):
     """A valid transcript must return HTTP 200 and a well-shaped response.
@@ -146,4 +145,3 @@ async def test_estimate_returns_500_on_unexpected_error(client: AsyncClient):
         )
 
     assert response.status_code == 500
-
