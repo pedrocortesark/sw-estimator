@@ -1,0 +1,229 @@
+"""Session state management for multi-turn conversations.
+
+Design decision — in-memory only (no DB, no Redis)
+----------------------------------------------------
+At this stage the service is single-process and stateless restarts are
+acceptable: losing a conversation on redeploy is a known trade-off we take
+consciously in exchange for zero infrastructure overhead.  When the product
+matures and we need horizontal scaling or session persistence across
+deployments, replacing ``_store`` with a Redis backend or a DB-backed
+repository will be a localised change confined to this module.
+"""
+
+from __future__ import annotations
+
+from datetime import datetime, timezone
+from typing import Literal
+
+from pydantic import BaseModel, Field
+
+
+# ---------------------------------------------------------------------------
+# Message — atomic unit stored inside ConversationHistory
+# ---------------------------------------------------------------------------
+
+
+class Message(BaseModel):
+    """A single LLM message with its role and text content."""
+
+    role: Literal["system", "user", "assistant"]
+    content: str
+
+    def to_dict(self) -> dict[str, str]:
+        """Return the wire format expected by every LLM provider."""
+        return {"role": self.role, "content": self.content}
+
+
+# ---------------------------------------------------------------------------
+# ConversationHistory — sliding-window message buffer
+# ---------------------------------------------------------------------------
+
+
+class ConversationHistory:
+    """Fixed-depth message buffer with a sliding-window eviction policy.
+
+    Turns are counted as *user+assistant pairs*.  When the buffer exceeds
+    ``max_turns`` pairs the oldest pair is discarded.  The system prompt
+    (role="system") is **always** preserved at position 0 — it is never
+    subject to eviction because removing it would silently degrade model
+    behaviour without any visible error.
+
+    Args:
+        max_turns: Maximum number of user/assistant pairs to keep.
+            Defaults to 10, which covers roughly 5 minutes of dense
+            conversation while staying well under typical context limits.
+    """
+
+    def __init__(self, max_turns: int = 10) -> None:
+        self.max_turns = max_turns
+        self._messages: list[Message] = []
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+
+    def set_system_prompt(self, content: str) -> None:
+        """Insert or replace the system prompt at position 0.
+
+        Called once at session creation; may be refreshed if the prompt
+        changes (e.g. when ProjectMetadata is first populated).
+        """
+        system_msg = Message(role="system", content=content)
+        if self._messages and self._messages[0].role == "system":
+            self._messages[0] = system_msg
+        else:
+            self._messages.insert(0, system_msg)
+
+    def add_user(self, content: str) -> None:
+        """Append a user message and evict stale turns if needed."""
+        self._messages.append(Message(role="user", content=content))
+        self._evict_if_needed()
+
+    def add_assistant(self, content: str) -> None:
+        """Append an assistant message."""
+        self._messages.append(Message(role="assistant", content=content))
+
+    def as_dicts(self) -> list[dict[str, str]]:
+        """Return the full message list in LLM wire format."""
+        return [m.to_dict() for m in self._messages]
+
+    def __len__(self) -> int:
+        """Number of messages currently stored (including system prompt)."""
+        return len(self._messages)
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    def _non_system_messages(self) -> list[Message]:
+        return [m for m in self._messages if m.role != "system"]
+
+    def _turn_count(self) -> int:
+        """Count completed or in-progress user/assistant pairs."""
+        non_sys = self._non_system_messages()
+        # Each user message starts a new turn regardless of whether an
+        # assistant reply has arrived yet.
+        return sum(1 for m in non_sys if m.role == "user")
+
+    def _evict_if_needed(self) -> None:
+        """Remove the oldest user+assistant pair when over the limit."""
+        while self._turn_count() > self.max_turns:
+            # Find the index of the first non-system message (oldest user msg)
+            for i, msg in enumerate(self._messages):
+                if msg.role == "user":
+                    # Remove it
+                    self._messages.pop(i)
+                    # Remove the immediately following assistant reply, if any
+                    if (
+                        i < len(self._messages)
+                        and self._messages[i].role == "assistant"
+                    ):
+                        self._messages.pop(i)
+                    break
+
+
+# ---------------------------------------------------------------------------
+# ProjectMetadata — facts extracted from the conversation
+# ---------------------------------------------------------------------------
+
+
+class ProjectMetadata(BaseModel):
+    """Structured facts inferred or agreed upon during the conversation.
+
+    All fields are optional because metadata is populated incrementally as
+    the user provides information across multiple turns.  Callers should
+    treat ``None`` as "not yet known" rather than a missing value.
+    """
+
+    project_name: str | None = Field(
+        default=None,
+        description="Human-readable name or codename for the project.",
+    )
+    assumed_team_size: int | None = Field(
+        default=None,
+        ge=1,
+        description="Number of engineers assumed for the estimate.",
+    )
+    mentioned_technologies: list[str] = Field(
+        default_factory=list,
+        description="Tech stack items mentioned by the user (e.g. 'React', 'PostgreSQL').",
+    )
+    agreed_scope: str | None = Field(
+        default=None,
+        description="Free-text summary of the scope as confirmed with the user.",
+    )
+
+
+# ---------------------------------------------------------------------------
+# Session — container for one user conversation
+# ---------------------------------------------------------------------------
+
+
+class Session:
+    """All conversational state scoped to a single session identifier.
+
+    Bundles a :class:`ConversationHistory` and :class:`ProjectMetadata`
+    under one roof so that service methods receive a single object instead
+    of two separate lookups.
+
+    Args:
+        session_id: Caller-supplied opaque identifier (UUID recommended).
+        max_turns: Forwarded to the underlying ConversationHistory buffer.
+    """
+
+    def __init__(self, session_id: str, max_turns: int = 10) -> None:
+        self.session_id = session_id
+        self.history = ConversationHistory(max_turns=max_turns)
+        self.metadata = ProjectMetadata()
+        self.created_at: datetime = datetime.now(timezone.utc)
+        self.last_active: datetime = self.created_at
+
+    def touch(self) -> None:
+        """Update the last-active timestamp (call on every turn)."""
+        self.last_active = datetime.now(timezone.utc)
+
+
+# ---------------------------------------------------------------------------
+# SessionStore — in-memory registry (module-level singleton)
+# ---------------------------------------------------------------------------
+
+
+class SessionStore:
+    """Thread-unsafe in-memory registry of active sessions.
+
+    Volatility accepted at this phase
+    ----------------------------------
+    Process restart or horizontal scaling will lose all sessions.  This is
+    intentional: the goal right now is to prove the multi-turn UX, not to
+    build production infrastructure.  When persistence is needed, swap this
+    class for one backed by Redis (using the same ``get`` / ``get_or_create``
+    interface) without touching any caller.
+
+    The store is not thread-safe.  FastAPI runs on an async event loop in a
+    single OS thread by default, so concurrent modification is not a concern
+    for the current deployment model.
+    """
+
+    def __init__(self) -> None:
+        self._store: dict[str, Session] = {}
+
+    def get(self, session_id: str) -> Session | None:
+        """Return an existing session or ``None`` if it does not exist."""
+        return self._store.get(session_id)
+
+    def get_or_create(self, session_id: str, max_turns: int = 10) -> Session:
+        """Return the session for *session_id*, creating it if absent."""
+        if session_id not in self._store:
+            self._store[session_id] = Session(session_id, max_turns=max_turns)
+        return self._store[session_id]
+
+    def delete(self, session_id: str) -> bool:
+        """Remove a session. Returns ``True`` if it existed."""
+        return self._store.pop(session_id, None) is not None
+
+    def __len__(self) -> int:
+        return len(self._store)
+
+
+# Module-level singleton — import this in service layer code.
+session_store: SessionStore = SessionStore()
