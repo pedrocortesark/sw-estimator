@@ -50,6 +50,7 @@ def render_estimation_prompt(
     Returns:
         A ``(system_prompt, user_prompt)`` tuple.
     """
+
     # Build context; fields that don't exist yet on the model use safe defaults
     # so old request objects remain compatible when new fields are added later.
     def _val(field: str, default: str) -> str:
