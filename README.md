@@ -112,6 +112,55 @@ docker compose up --build
 
 Levanta `api` + `streamlit` + `redis` en contenedores. Streamlit se comunica con la API via red interna Docker (`http://api:8000`).
 
+## Sesiones y adjuntos
+
+### Crear sesión
+
+```bash
+curl -X POST http://localhost:8000/api/v1/sessions
+# → {"session_id": "7a9a9867-..."}
+```
+
+### Estimar con adjuntos (multipart/form-data)
+
+```bash
+curl -X POST http://localhost:8000/api/v1/sessions/{session_id}/estimate \
+  -F "transcript=El cliente quiere una app web para gestión de proyectos" \
+  -F "attachments=@requisitos.pdf" \
+  -F "attachments=@contrato.docx"
+```
+
+Formatos de adjunto aceptados: `.pdf`, `.docx`. Límite: 10 MB por archivo.
+
+### Enfoque de extracción: Camino B (extracción local)
+
+El texto de los adjuntos se extrae **localmente en el proceso** usando
+[pypdf](https://pypdf.readthedocs.io/) (PDFs) y
+[python-docx](https://python-docx.readthedocs.io/) (Word), y se concatena
+al transcript antes de la llamada al LLM:
+
+```
+<transcript original>
+
+--- attachment: requisitos.pdf ---
+<texto extraído del PDF>
+--- end of requisitos.pdf ---
+```
+
+**Por qué Camino B y no la Files API del proveedor (Camino A):**
+
+- **Sin lock-in de proveedor.** El texto extraído es un string ordinario que
+  funciona con cualquier modelo ya conectado vía LiteLLM. La Files API difiere
+  entre OpenAI y Anthropic, lo que anularía la ventaja de provider-agnostic
+  del `LLMWrapper`.
+- **Word (.docx) no tiene soporte nativo en ninguna Files API.** Con el Camino A
+  habría que implementar extracción local de todas formas para `.docx`, acabando
+  con un híbrido de los dos caminos.
+- **Control de tokens.** Solo se facturan los tokens del texto que se incluye
+  explícitamente; el proveedor no ve páginas irrelevantes.
+- **Base para RAG.** El texto en memoria está listo para ser troceado e
+  indexado en el módulo de retrieval, sin pasos adicionales.
+
 ## Caché
 
 | Tipo | Tecnología | Cuando aplica |
