@@ -8,7 +8,11 @@ from pydantic import BaseModel
 
 from src.dependencies import get_estimation_service
 from src.schemas.estimation import EstimationRequest, EstimationResponse
-from src.services.document_extractor import UnsupportedFileTypeError, build_attachment_block, extract_text
+from src.services.document_extractor import (
+    UnsupportedFileTypeError,
+    build_attachment_block,
+    extract_text,
+)
 from src.services.estimation import EstimationService
 from src.services.sessions import session_store
 
@@ -105,7 +109,9 @@ async def session_estimate(
                 detail=str(exc),
             ) from exc
 
-        combined += "\n\n" + build_attachment_block(upload.filename or "attachment", text)
+        combined += "\n\n" + build_attachment_block(
+            upload.filename or "attachment", text
+        )
 
     request = EstimationRequest(transcript=combined)
     result = await service.estimate(request)
