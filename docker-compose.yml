@@ -31,6 +31,21 @@ services:
       redis:
         condition: service_healthy
 
+  streamlit:
+    image: sw-estimator:latest  # same image, different command
+    command: ["streamlit", "run", "app/streamlit_app.py",
+              "--server.port=8501", "--server.address=0.0.0.0",
+              "--server.headless=true"]
+    ports:
+      - "8501:8501"
+    env_file:
+      - .env
+    environment:
+      - ESTIMATOR_API_URL=http://api:8000  # internal docker network
+    restart: unless-stopped
+    depends_on:
+      - api
+
   # Redis Stack includes RediSearch, which provides the FT.CREATE / FT.SEARCH
   # commands required by the semantic cache's vector index.
   # Vanilla redis:alpine does NOT include RediSearch and will fail with
@@ -38,7 +53,7 @@ services:
   redis:
     image: redis/redis-stack-server:latest
     ports:
-      - "6379:6379" # Redis port (accessible from host for local dev)
+      - "6380:6379" # Redis Stack on host:6380 (6379 is taken by another Redis)
     volumes:
       - redis_data:/data
     restart: unless-stopped

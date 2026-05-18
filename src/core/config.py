@@ -40,6 +40,16 @@ class Settings(BaseSettings):
         "openai/gpt-4o-mini",
     ]
 
+    # --- Cache ---
+    # Set to a Redis Stack URL (e.g. redis://localhost:6379) to enable
+    # semantic caching.  Leave empty to use the in-process memory cache only.
+    redis_url: str = ""
+    # Minimum cosine similarity to consider two transcripts a semantic cache hit.
+    # Lower = more cache hits but higher risk of returning a wrong estimate.
+    # 0.85 catches phrasing variants (e.g. "Rhino.Compute" vs "Compute");
+    # raise toward 0.92 for stricter matching in production.
+    semantic_cache_threshold: float = 0.85
+
     # --- API Keys ---
     openai_api_key: str = ""
     anthropic_api_key: str = ""

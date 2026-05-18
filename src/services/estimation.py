@@ -58,6 +58,10 @@ Every call to ``estimate()`` passes through these layers in sequence:
 
 from __future__ import annotations
 
+import hashlib
+import json
+from typing import TYPE_CHECKING
+
 from openai import AsyncOpenAI
 
 from src.cache.semantic import EstimationSemanticCache
@@ -66,6 +70,17 @@ from src.guardrails.output import enforce_scope_response
 from src.prompts.loader import render_estimation_prompt
 from src.schemas.estimation import EstimationRequest, EstimationResponse
 from src.services.llm_wrapper import get_llm_wrapper
+
+if TYPE_CHECKING:
+    from src.schemas.estimation import EstimationResult
+
+# ---------------------------------------------------------------------------
+# In-process fallback cache — used when no Redis semantic cache is wired.
+# Keyed by SHA-256 of (transcript, provider, project_type, detail_level,
+# output_format).  Stored at module level so it survives across requests
+# within the same worker process.
+# ---------------------------------------------------------------------------
+_IN_MEMORY_CACHE: dict[str, "EstimationResult"] = {}
 
 
 class EstimationService:
@@ -109,7 +124,7 @@ class EstimationService:
             return self._build_response(
                 cached_result,
                 {
-                    "provider": "semantic_cache",
+                    "provider": "memory_cache" if self._cache is None else "semantic_cache",
                     "model": "cached",
                     "input_tokens": 0,
                     "output_tokens": 0,
@@ -148,17 +163,39 @@ class EstimationService:
         """
         await check_input(request.transcript, openai_client=self._openai_client)
 
+    @staticmethod
+    def _cache_key(request: EstimationRequest) -> str:
+        """Return a deterministic SHA-256 fingerprint for *request*."""
+        data = json.dumps(
+            {
+                "transcript": request.transcript,
+                "provider": request.provider,
+                "project_type": request.project_type,
+                "detail_level": request.detail_level,
+                "output_format": request.output_format,
+            },
+            sort_keys=True,
+        )
+        return hashlib.sha256(data.encode()).hexdigest()
+
     def _lookup_cache(self, request: EstimationRequest) -> "EstimationResult | None":
         """Layer 2 (read) — return a cached result for semantically similar input.
 
-        Returns ``None`` on a cache miss or when no cache is configured.
+        Checks, in order:
+        1. Redis semantic cache (when configured)
+        2. In-process memory dict (always checked; fallback for local dev)
+
+        Returns ``None`` on a cache miss.
         """
-        if self._cache is None:
-            return None
         from src.schemas.estimation import EstimationResult
 
-        result = self._cache.lookup(request)
-        return result if isinstance(result, EstimationResult) else None
+        if self._cache is not None:
+            result = self._cache.lookup(request)
+            if isinstance(result, EstimationResult):
+                return result
+
+        # Fallback: module-level in-memory dict
+        return _IN_MEMORY_CACHE.get(self._cache_key(request))
 
     def _render_prompts(self, request: EstimationRequest) -> tuple[str, str]:
         """Layer 3 — render Jinja2 templates into (system_prompt, user_prompt).
@@ -224,9 +261,11 @@ class EstimationService:
 
     def _store_cache(self, request: EstimationRequest, estimation_result) -> None:
         """Layer 5b — persist the result for future semantically-similar requests."""
-        if self._cache is None:
-            return
-        self._cache.store(request, estimation_result)
+        # Always populate the in-memory fallback cache.
+        _IN_MEMORY_CACHE[self._cache_key(request)] = estimation_result
+        # Also write to Redis semantic cache when configured.
+        if self._cache is not None:
+            self._cache.store(request, estimation_result)
 
     def _build_response(
         self,
