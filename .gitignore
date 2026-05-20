@@ -36,3 +36,8 @@ logs/
 
 # Docker local overrides — machine-specific, never commit
 docker-compose.override.yml
+
+# .NET / Blazor — build artifacts
+frontend/**/bin/
+frontend/**/obj/
+frontend/**/.vs/
