@@ -93,7 +93,7 @@ class FakeEstimationService:
     def __init__(self) -> None:
         self.calls: list = []
 
-    async def estimate(self, request):
+    async def estimate(self, request, project_metadata=None, prompt_version=None):
         self.calls.append(request)
         return _FAKE_RESPONSE
 
@@ -244,7 +244,7 @@ async def test_input_guardrail_violation_returns_400():
     """InputGuardrailViolation must be translated to HTTP 400 with reason."""
 
     class _GuardrailService:
-        async def estimate(self, request):
+        async def estimate(self, request, project_metadata=None, prompt_version=None):
             raise InputGuardrailViolation(
                 message="Prompt injection attempt detected.",
                 reason="prompt_injection",
@@ -277,7 +277,7 @@ async def test_unexpected_service_error_returns_500():
     """Unhandled exceptions must become HTTP 500."""
 
     class _BrokenService:
-        async def estimate(self, request):
+        async def estimate(self, request, project_metadata=None, prompt_version=None):
             raise Exception("upstream error")
 
     _app = create_app()

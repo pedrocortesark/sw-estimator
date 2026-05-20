@@ -48,12 +48,12 @@ _MOCK_RESPONSE = EstimationResponse(
 
 
 class _MockService:
-    async def estimate(self, request):
+    async def estimate(self, request, project_metadata=None, prompt_version=None):
         return _MOCK_RESPONSE
 
 
 class _FailingService:
-    async def estimate(self, request):
+    async def estimate(self, request, project_metadata=None, prompt_version=None):
         raise RuntimeError("LLM network timeout")
 
 
@@ -118,7 +118,7 @@ async def test_estimate_returns_400_for_unknown_provider(client: AsyncClient, te
     from src.core.exceptions import UnknownProviderError
 
     class _BadProviderService:
-        async def estimate(self, request):
+        async def estimate(self, request, project_metadata=None, prompt_version=None):
             raise UnknownProviderError("Unsupported provider: 'grok'.")
 
     test_app.dependency_overrides[get_estimation_service] = lambda: (

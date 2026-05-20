@@ -201,26 +201,34 @@ La segunda llamada con el mismo (o similar) input devuelve `cached: true` en la 
 
 ```
 src/
-├── cache/semantic.py        # Layer 2 — semantic cache (redisvl)
+├── cache/semantic.py            # Layer 2 — semantic cache (redisvl)
 ├── guardrails/
-│   ├── input.py             # Layer 1 — prompt injection, PII, moderation
-│   └── output.py            # Layer 5 — out-of-scope enforcement
+│   ├── input.py                 # Layer 1 — prompt injection, PII, moderation
+│   └── output.py                # Layer 5 — out-of-scope enforcement
 ├── prompts/
-│   ├── loader.py            # Layer 3 — Jinja2 render
-│   └── estimation/v1/       # Templates: system.j2, user.j2, examples.j2
+│   ├── loader.py                # Layer 3 — Jinja2 render (project_metadata aware)
+│   └── estimation/
+│       ├── v1/                  # Templates: system.j2, user.j2, examples.j2
+│       └── v2/                  # Chain-of-thought variant
 ├── services/
-│   ├── estimation.py        # Pipeline orchestrator
-│   ├── llm_wrapper.py       # Instructor + LiteLLM
-│   └── pricing.py           # Cost calculation
-├── schemas/estimation.py    # Pydantic models (request / response)
-├── routers/estimation.py    # POST /api/v1/estimate
-├── dependencies.py          # FastAPI DI — wires Redis cache
+│   ├── estimation.py            # Pipeline orchestrator
+│   ├── sessions.py              # ConversationHistory + ProjectMetadata + SessionStore
+│   ├── metadata_extractor.py    # Heuristic metadata updater (post-turn)
+│   ├── document_extractor.py    # Camino B: pypdf + python-docx local extraction
+│   ├── llm_wrapper.py           # Instructor + LiteLLM
+│   └── pricing.py               # Cost calculation
+├── schemas/estimation.py        # Pydantic models (request / response)
+├── routers/
+│   ├── estimation.py            # POST /api/v1/estimate
+│   └── sessions.py              # POST /sessions, POST /sessions/{id}/estimate, GET /sessions/{id}
+├── dependencies.py              # FastAPI DI — wires Redis cache
 └── core/
-    ├── config.py            # Settings (pydantic-settings)
-    └── exceptions.py        # HTTP error handlers
+    ├── config.py                # Settings (pydantic-settings) — prompt_version, max_conversation_turns
+    └── exceptions.py            # HTTP error handlers
 app/
-└── streamlit_app.py         # Streamlit frontend
-tests/                       # 83 tests (pytest-asyncio)
-dev.sh                       # Script de arranque local
-docker-compose.yml           # Redis Stack + API + Streamlit
+└── streamlit_app.py             # Streamlit multi-turn client
+tests/
+└── api/test_sessions.py         # Integration tests: metadata accumulation, PDF attachment, sliding window
+dev.sh                           # Script de arranque local
+docker-compose.yml               # Redis Stack + API + Streamlit
 ```
