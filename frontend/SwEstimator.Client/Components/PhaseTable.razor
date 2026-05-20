@@ -1,0 +1,30 @@
+<MudTable Items="Phases" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm" Class="@Class">
+    <HeaderContent>
+        <MudTh>Phase</MudTh>
+        <MudTh Style="text-align:right">Hours</MudTh>
+        <MudTh Style="text-align:right">Cost (EUR)</MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd>
+            <MudText Typo="Typo.body2"><b>@context.Name</b></MudText>
+            @if (context.Tasks.Any())
+            {
+                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                    @string.Join(" · ", context.Tasks.Select(t => t.Name))
+                </MudText>
+            }
+        </MudTd>
+        <MudTd Style="text-align:right">@context.TotalHours.ToString("N0")</MudTd>
+        <MudTd Style="text-align:right">€ @context.TotalCostUsd.ToString("N0")</MudTd>
+    </RowTemplate>
+    <FooterContent>
+        <MudTd><b>Total</b></MudTd>
+        <MudTd Style="text-align:right"><b>@Phases.Sum(p => p.TotalHours).ToString("N0")</b></MudTd>
+        <MudTd Style="text-align:right"><b>€ @Phases.Sum(p => p.TotalCostUsd).ToString("N0")</b></MudTd>
+    </FooterContent>
+</MudTable>
+
+@code {
+    [Parameter, EditorRequired] public List<Phase> Phases { get; set; } = [];
+    [Parameter] public string Class { get; set; } = "";
+}

@@ -1,0 +1,77 @@
+<MudPaper Class="pa-4" Elevation="1" Style="height:100%">
+    <MudText Typo="Typo.subtitle2" Color="Color.Secondary" Class="mb-3">SESSION</MudText>
+
+    @if (SessionInfo is null)
+    {
+        <MudText Typo="Typo.caption" Color="Color.Secondary">No active session.</MudText>
+    }
+    else
+    {
+        <MudStack Spacing="2">
+            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                Turns: <b>@SessionInfo.TurnCount</b>
+            </MudText>
+
+            @{
+                var meta = SessionInfo.ProjectMetadata;
+            }
+
+            @if (meta.TryGetValue("project_name", out var pName) && pName is not null)
+            {
+                <div>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">Project</MudText>
+                    <MudText Typo="Typo.body2">@pName</MudText>
+                </div>
+            }
+
+            @if (meta.TryGetValue("assumed_team_size", out var tSize) && tSize is not null)
+            {
+                <div>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">Team size</MudText>
+                    <MudText Typo="Typo.body2">@tSize persons</MudText>
+                </div>
+            }
+
+            @if (meta.TryGetValue("mentioned_technologies", out var techObj) &&
+                 techObj is System.Text.Json.JsonElement techEl &&
+                 techEl.ValueKind == System.Text.Json.JsonValueKind.Array)
+            {
+                var techs = techEl.EnumerateArray().Select(e => e.GetString()).Where(s => s is not null).ToList();
+                @if (techs.Any())
+                {
+                    <div>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Technologies</MudText>
+                        <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="1" Class="mt-1">
+                            @foreach (var tech in techs)
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Default">@tech</MudChip>
+                            }
+                        </MudStack>
+                    </div>
+                }
+            }
+
+            @if (meta.TryGetValue("agreed_scope", out var scope) && scope is not null)
+            {
+                <div>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">Agreed scope</MudText>
+                    <MudText Typo="Typo.body2">@scope</MudText>
+                </div>
+            }
+        </MudStack>
+
+        <MudDivider Class="my-3" />
+        <MudButton Variant="Variant.Text"
+                   Color="Color.Error"
+                   Size="Size.Small"
+                   StartIcon="@Icons.Material.Filled.RestartAlt"
+                   OnClick="OnNewSession">
+            New session
+        </MudButton>
+    }
+</MudPaper>
+
+@code {
+    [Parameter] public SessionInfoResponse? SessionInfo { get; set; }
+    [Parameter] public EventCallback OnNewSession { get; set; }
+}

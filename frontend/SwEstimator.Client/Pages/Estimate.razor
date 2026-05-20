@@ -1,0 +1,104 @@
+@page "/"
+@inject EstimatorApiClient Api
+@inject ISnackbar Snackbar
+
+<MudGrid Spacing="4">
+    <!-- Left: form + history -->
+    <MudItem xs="12" md="8">
+        <MudText Typo="Typo.h5" Class="mb-4">Software Effort Estimator</MudText>
+
+        <TranscriptForm IsLoading="_isLoading" OnSubmit="HandleEstimate" />
+
+        @if (_errorMessage is not null)
+        {
+            <MudAlert Severity="Severity.Error" Class="mt-3" ShowCloseIcon="true"
+                      CloseIconClicked="() => _errorMessage = null">
+                @_errorMessage
+            </MudAlert>
+        }
+
+        @if (_history.Any())
+        {
+            <MudText Typo="Typo.h6" Class="mt-6 mb-3">History</MudText>
+            @foreach (var (turn, idx) in _history.Select((t, i) => (t, i + 1)).Reverse())
+            {
+                <MudPaper Class="mb-4 pa-2" Elevation="0" Style="border:1px solid var(--mud-palette-divider)">
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-2">
+                        Turn @idx — @turn.Transcript[..Math.Min(80, turn.Transcript.Length)]…
+                    </MudText>
+                    <EstimationCard Result="turn.Response.Estimation"
+                                    Cached="turn.Response.Cached"
+                                    PromptVersion="turn.Response.PromptVersion"
+                                    Provider="turn.Response.ProviderUsed"
+                                    Model="turn.Response.ModelUsed" />
+                </MudPaper>
+            }
+        }
+    </MudItem>
+
+    <!-- Right: session sidebar -->
+    <MudItem xs="12" md="4">
+        <SessionSidebar SessionInfo="_sessionInfo" OnNewSession="InitSessionAsync" />
+    </MudItem>
+</MudGrid>
+
+@code {
+    private bool _isLoading;
+    private string? _errorMessage;
+    private string? _sessionId;
+    private SessionInfoResponse? _sessionInfo;
+
+    private record TurnEntry(string Transcript, EstimationResponse Response);
+    private readonly List<TurnEntry> _history = [];
+
+    protected override async Task OnInitializedAsync() => await InitSessionAsync();
+
+    private async Task InitSessionAsync()
+    {
+        _history.Clear();
+        _sessionInfo = null;
+        _errorMessage = null;
+        try
+        {
+            var created = await Api.CreateSessionAsync();
+            _sessionId = created.SessionId;
+            _sessionInfo = await Api.GetSessionAsync(_sessionId);
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Could not connect to the API: {ex.Message}";
+        }
+    }
+
+    private async Task HandleEstimate(EstimationRequest request)
+    {
+        if (_sessionId is null) return;
+
+        _isLoading = true;
+        _errorMessage = null;
+        StateHasChanged();
+
+        try
+        {
+            var response = await Api.EstimateAsync(_sessionId, request.Transcript);
+            _history.Add(new TurnEntry(request.Transcript, response));
+            _sessionInfo = await Api.GetSessionAsync(_sessionId);
+        }
+        catch (GuardrailException ex)
+        {
+            _errorMessage = $"Input rejected: {ex.Message}";
+        }
+        catch (UpstreamLlmException ex)
+        {
+            _errorMessage = $"LLM error: {ex.Message}";
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Unexpected error: {ex.Message}";
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+}

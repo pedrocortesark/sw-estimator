@@ -1,0 +1,88 @@
+<MudPaper Class="pa-4" Elevation="0">
+    <MudForm @ref="_form">
+        <MudTextField T="string"
+                      @bind-Value="Transcript"
+                      Label="Meeting transcript / project description"
+                      Placeholder="Describe the project: scope, tech stack, team constraints..."
+                      Lines="6"
+                      Variant="Variant.Outlined"
+                      Required="true"
+                      RequiredError="Transcript is required."
+                      Counter="2000"
+                      MaxLength="2000"
+                      Class="mb-4" />
+
+        <MudGrid Spacing="2">
+            <MudItem xs="12" sm="4">
+                <MudSelect T="ProjectType?" @bind-Value="ProjectType"
+                           Label="Project type" Variant="Variant.Outlined" Clearable="true">
+                    <MudSelectItem Value="@((ProjectType?)Models.ProjectType.WebSaas)">Web SaaS</MudSelectItem>
+                    <MudSelectItem Value="@((ProjectType?)Models.ProjectType.MobileApp)">Mobile App</MudSelectItem>
+                    <MudSelectItem Value="@((ProjectType?)Models.ProjectType.InternalTool)">Internal Tool</MudSelectItem>
+                    <MudSelectItem Value="@((ProjectType?)Models.ProjectType.DataPipeline)">Data Pipeline</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="4">
+                <MudSelect T="DetailLevel?" @bind-Value="DetailLevel"
+                           Label="Detail level" Variant="Variant.Outlined" Clearable="true">
+                    <MudSelectItem Value="@((DetailLevel?)Models.DetailLevel.Summary)">Summary</MudSelectItem>
+                    <MudSelectItem Value="@((DetailLevel?)Models.DetailLevel.Medium)">Medium</MudSelectItem>
+                    <MudSelectItem Value="@((DetailLevel?)Models.DetailLevel.Detailed)">Detailed</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="4">
+                <MudSelect T="OutputFormat?" @bind-Value="OutputFormat"
+                           Label="Output format" Variant="Variant.Outlined" Clearable="true">
+                    <MudSelectItem Value="@((OutputFormat?)Models.OutputFormat.PhasesTable)">Phases Table</MudSelectItem>
+                    <MudSelectItem Value="@((OutputFormat?)Models.OutputFormat.LineItems)">Line Items</MudSelectItem>
+                    <MudSelectItem Value="@((OutputFormat?)Models.OutputFormat.Narrative)">Narrative</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+        </MudGrid>
+
+        <MudStack Row="true" Justify="Justify.FlexEnd" Class="mt-4">
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       Size="Size.Large"
+                       StartIcon="@Icons.Material.Filled.AutoAwesome"
+                       Disabled="IsLoading"
+                       OnClick="HandleSubmit">
+                @if (IsLoading)
+                {
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                    <span>Estimating…</span>
+                }
+                else
+                {
+                    <span>Generate Estimate</span>
+                }
+            </MudButton>
+        </MudStack>
+    </MudForm>
+</MudPaper>
+
+@code {
+    [Parameter] public bool IsLoading { get; set; }
+    [Parameter] public EventCallback<EstimationRequest> OnSubmit { get; set; }
+
+    private MudForm _form = default!;
+
+    public string Transcript     { get; set; } = "";
+    public ProjectType?  ProjectType  { get; set; }
+    public DetailLevel?  DetailLevel  { get; set; }
+    public OutputFormat? OutputFormat { get; set; }
+
+    private async Task HandleSubmit()
+    {
+        await _form.Validate();
+        if (!_form.IsValid) return;
+
+        await OnSubmit.InvokeAsync(new EstimationRequest
+        {
+            Transcript   = Transcript,
+            ProjectType  = ProjectType,
+            DetailLevel  = DetailLevel,
+            OutputFormat = OutputFormat,
+        });
+    }
+}

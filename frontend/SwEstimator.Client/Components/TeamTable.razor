@@ -1,0 +1,16 @@
+<MudTable Items="Members" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm">
+    <HeaderContent>
+        <MudTh>Role</MudTh>
+        <MudTh Style="text-align:center">Count</MudTh>
+        <MudTh>Dedication</MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd>@context.Role</MudTd>
+        <MudTd Style="text-align:center">@context.Count</MudTd>
+        <MudTd>@context.Dedication</MudTd>
+    </RowTemplate>
+</MudTable>
+
+@code {
+    [Parameter, EditorRequired] public List<TeamMember> Members { get; set; } = [];
+}

@@ -1,0 +1,78 @@
+<MudPaper Class="pa-4" Elevation="2">
+    @if (Result.IsOutOfScope)
+    {
+        <MudAlert Severity="Severity.Warning" Class="mb-2">
+            @Result.ExecutiveSummary
+        </MudAlert>
+    }
+    else
+    {
+        <!-- KPI row -->
+        <MudGrid Spacing="3" Class="mb-4">
+            <MudItem xs="12" sm="4">
+                <MudPaper Class="pa-3 d-flex flex-column align-center" Elevation="0" Style="background:var(--mud-palette-background-grey)">
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">Total hours</MudText>
+                    <MudText Typo="Typo.h5" Color="Color.Primary"><b>@Result.TotalHours.ToString("N0") h</b></MudText>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="12" sm="4">
+                <MudPaper Class="pa-3 d-flex flex-column align-center" Elevation="0" Style="background:var(--mud-palette-background-grey)">
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">Duration</MudText>
+                    <MudText Typo="Typo.h5" Color="Color.Primary"><b>@Result.DurationWeeks.ToString("N1") wk</b></MudText>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="12" sm="4">
+                <MudPaper Class="pa-3 d-flex flex-column align-center" Elevation="0" Style="background:var(--mud-palette-background-grey)">
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">Confidence</MudText>
+                    <MudText Typo="Typo.h5" Color="@ConfidenceColor"><b>@Result.ConfidencePct.ToString("N0")%</b></MudText>
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+
+        <!-- Badges -->
+        <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-3" Spacing="1">
+            <MudChip T="string" Size="Size.Small" Color="Color.Default">@PromptVersion</MudChip>
+            @if (Cached)
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.FlashOn">cached</MudChip>
+            }
+            <MudChip T="string" Size="Size.Small" Color="Color.Default">@Provider · @Model</MudChip>
+        </MudStack>
+
+        <!-- Executive summary -->
+        <MudText Typo="Typo.subtitle1" Class="mb-1"><b>Executive summary</b></MudText>
+        <MudText Typo="Typo.body2" Class="mb-4">@Result.ExecutiveSummary</MudText>
+
+        <!-- Phases -->
+        @if (Result.Phases.Any())
+        {
+            <MudText Typo="Typo.subtitle1" Class="mb-2"><b>Phases</b></MudText>
+            <PhaseTable Phases="Result.Phases" Class="mb-4" />
+        }
+
+        <!-- Team -->
+        @if (Result.TeamComposition.Any())
+        {
+            <MudExpansionPanels Class="mt-2">
+                <MudExpansionPanel Text="Team composition">
+                    <TeamTable Members="Result.TeamComposition" />
+                </MudExpansionPanel>
+            </MudExpansionPanels>
+        }
+    }
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired] public EstimationResult Result      { get; set; } = default!;
+    [Parameter]                 public bool             Cached       { get; set; }
+    [Parameter]                 public string           PromptVersion { get; set; } = "v1";
+    [Parameter]                 public string           Provider     { get; set; } = "";
+    [Parameter]                 public string           Model        { get; set; } = "";
+
+    private Color ConfidenceColor => Result.ConfidencePct switch
+    {
+        >= 75 => Color.Success,
+        >= 50 => Color.Warning,
+        _     => Color.Error,
+    };
+}
