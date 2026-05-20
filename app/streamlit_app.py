@@ -1,4 +1,4 @@
-"""Streamlit front-end for the SW Estimator API.
+"""Streamlit front-end for the SW Estimator API — multi-turn session client.
 
 Communicates exclusively via HTTP with the FastAPI backend.
 No src/ imports — this is a standalone client app.
@@ -20,7 +20,6 @@ import streamlit as st
 # ---------------------------------------------------------------------------
 
 API_BASE = os.environ.get("ESTIMATOR_API_URL", "http://localhost:8000").rstrip("/")
-ESTIMATE_URL = f"{API_BASE}/api/v1/estimate"
 TIMEOUT_SECONDS = 120
 HOURS_PER_WEEK = 32  # matches system prompt rate
 
@@ -31,8 +30,6 @@ HOURS_PER_WEEK = 32  # matches system prompt rate
 
 
 class GuardrailError(Exception):
-    """Raised when the backend returns HTTP 400 (input guardrail violation)."""
-
     def __init__(self, reason: str, message: str) -> None:
         super().__init__(message)
         self.reason = reason
@@ -40,123 +37,163 @@ class GuardrailError(Exception):
 
 
 class UpstreamError(Exception):
-    """Raised when the backend returns HTTP 502 (LLM unavailable)."""
-
     def __init__(self, message: str = "LLM upstream error") -> None:
         super().__init__(message)
         self.message = message
 
 
 # ---------------------------------------------------------------------------
-# HTTP client
+# HTTP helpers
 # ---------------------------------------------------------------------------
 
 
-def call_estimator(payload: dict) -> dict:
-    """POST /api/v1/estimate and return the parsed response body.
+def _create_session() -> str:
+    """POST /api/v1/sessions → returns the new session_id."""
+    resp = httpx.post(f"{API_BASE}/api/v1/sessions", timeout=10)
+    resp.raise_for_status()
+    return resp.json()["session_id"]
+
+
+def _get_session_info(session_id: str) -> dict:
+    """GET /api/v1/sessions/{id} → {session_id, turn_count, project_metadata}."""
+    resp = httpx.get(f"{API_BASE}/api/v1/sessions/{session_id}", timeout=10)
+    resp.raise_for_status()
+    return resp.json()
+
+
+def _call_session_estimate(
+    session_id: str,
+    transcript: str,
+    uploaded_files: list,
+) -> dict:
+    """POST /api/v1/sessions/{id}/estimate (multipart/form-data).
 
     Raises
     ------
-    GuardrailError   on HTTP 400 (input rejected by guardrails)
-    UpstreamError    on HTTP 502 (LLM failed to produce a valid response)
-    httpx.TimeoutException   on network timeout (caller catches and shows UI msg)
-    Exception        on any other non-200 status
+    GuardrailError   on HTTP 400
+    UpstreamError    on HTTP 502
+    httpx.HTTPStatusError  on 404 / 413 / 415 / other
     """
-    response = httpx.post(ESTIMATE_URL, json=payload, timeout=TIMEOUT_SECONDS)
+    files = [
+        ("attachments", (f.name, f.getvalue(), f.type))
+        for f in (uploaded_files or [])
+    ]
+    resp = httpx.post(
+        f"{API_BASE}/api/v1/sessions/{session_id}/estimate",
+        data={"transcript": transcript},
+        files=files or None,
+        timeout=TIMEOUT_SECONDS,
+    )
 
-    if response.status_code == 200:
-        return response.json()
-
-    if response.status_code == 400:
-        body = response.json()
+    if resp.status_code == 200:
+        return resp.json()
+    if resp.status_code == 400:
+        body = resp.json()
         raise GuardrailError(
             reason=body.get("reason", "unknown"),
             message=body.get("detail", "Input rejected."),
         )
-
-    if response.status_code == 502:
+    if resp.status_code == 502:
         raise UpstreamError()
 
-    raise Exception(
-        f"Unexpected response {response.status_code}: {response.text[:200]}"
-    )
+    resp.raise_for_status()
+    raise Exception(f"Unexpected {resp.status_code}: {resp.text[:200]}")
 
 
 # ---------------------------------------------------------------------------
-# Result rendering
+# Session state helpers
 # ---------------------------------------------------------------------------
 
 
-def _render_metadata_badges(result: dict) -> None:
-    """Render prompt_version and CACHED badge inline."""
-    badges: list[str] = [f"`{result.get('prompt_version', 'v1')}`"]
-    if result.get("cached"):
-        badges.append("🟢 **CACHED**")
-    st.markdown("  ".join(badges))
+def _init_session_state() -> None:
+    """Create a fresh backend session and reset all local state."""
+    session_id = _create_session()
+    st.session_state.session_id = session_id
+    st.session_state.conversation = []  # list of {transcript, result} dicts
+    st.session_state.project_metadata = {}
+    st.session_state.turn_count = 0
 
 
-def _render_result(result: dict) -> None:
-    """Render the estimation result returned by the API."""
+# ---------------------------------------------------------------------------
+# Rendering helpers
+# ---------------------------------------------------------------------------
+
+
+def _render_project_metadata(metadata: dict) -> None:
+    """Render the accumulated project metadata in the sidebar."""
+    project_name = metadata.get("project_name")
+    team_size = metadata.get("assumed_team_size")
+    techs = metadata.get("mentioned_technologies") or []
+    scope = metadata.get("agreed_scope")
+
+    if not any([project_name, team_size, techs, scope]):
+        st.caption("Sin contexto acumulado todavía.")
+        return
+
+    if project_name:
+        st.markdown(f"**Proyecto:** {project_name}")
+    if team_size:
+        st.markdown(f"**Equipo estimado:** {team_size} personas")
+    if techs:
+        st.markdown(f"**Tecnologías:** {', '.join(techs)}")
+    if scope:
+        with st.expander("Alcance acordado", expanded=False):
+            st.write(scope)
+
+
+def _render_estimation_result(result: dict) -> None:
+    """Render a single EstimationResponse dict."""
     estimation = result.get("estimation", {})
     summary = estimation.get("executive_summary", "")
 
-    _render_metadata_badges(result)
+    badges: list[str] = [f"`{result.get('prompt_version', 'v1')}`"]
+    if result.get("cached"):
+        badges.append("🟢 **CACHED**")
+    st.caption("  ".join(badges))
 
-    # Out-of-scope shortcut: show warning and stop rendering
     if summary.startswith("Out of scope:"):
         st.warning(summary)
         return
 
-    # ---- Three top-level metrics ----
     col_dur, col_cost, col_conf = st.columns(3)
     with col_dur:
-        st.metric(
-            "Duration",
-            f"{estimation.get('duration_weeks', 0):.1f} weeks",
-        )
+        st.metric("Duración", f"{estimation.get('duration_weeks', 0):.1f} sem")
     with col_cost:
-        st.metric(
-            "Total cost",
-            f"€ {estimation.get('total_cost_usd', 0):,.0f}",
-        )
+        st.metric("Coste total", f"€ {estimation.get('total_cost_usd', 0):,.0f}")
     with col_conf:
-        confidence = estimation.get("confidence_pct", 0)
-        st.metric("Confidence", f"{confidence:.0f}%")
+        st.metric("Confianza", f"{estimation.get('confidence_pct', 0):.0f}%")
 
-    st.markdown("**Executive summary**")
+    st.markdown("**Resumen ejecutivo**")
     st.write(summary)
 
-    # ---- Phases table ----
     phases = estimation.get("phases", [])
     if phases:
-        rows = []
-        for phase in phases:
-            phase_hours = phase.get("total_hours", 0)
-            rows.append(
-                {
-                    "Phase": phase.get("name", ""),
-                    "Weeks": round(phase_hours / HOURS_PER_WEEK, 1),
-                    "Cost €": f"€ {phase.get('total_cost_usd', 0):,.0f}",
-                    "Tasks": ", ".join(
-                        t.get("name", "") for t in phase.get("tasks", [])
-                    ),
-                }
-            )
+        rows = [
+            {
+                "Fase": p.get("name", ""),
+                "Semanas": round(p.get("total_hours", 0) / HOURS_PER_WEEK, 1),
+                "Coste €": f"€ {p.get('total_cost_usd', 0):,.0f}",
+                "Tareas": ", ".join(t.get("name", "") for t in p.get("tasks", [])),
+            }
+            for p in phases
+        ]
         st.dataframe(rows, use_container_width=True, hide_index=True)
 
-    # ---- Team composition ----
     team = estimation.get("team_composition", [])
     if team:
-        with st.expander("Team composition"):
-            team_rows = [
-                {
-                    "Role": m.get("role", ""),
-                    "Count": m.get("count", 1),
-                    "Dedication": m.get("dedication", ""),
-                }
-                for m in team
-            ]
-            st.dataframe(team_rows, use_container_width=True, hide_index=True)
+        with st.expander("Composición del equipo"):
+            st.dataframe(
+                [
+                    {
+                        "Rol": m.get("role"),
+                        "Nº": m.get("count"),
+                        "Dedicación": m.get("dedication"),
+                    }
+                    for m in team
+                ],
+                use_container_width=True,
+                hide_index=True,
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -171,74 +208,116 @@ def main() -> None:
         layout="wide",
     )
 
-    st.title("📐 SW Estimator")
-    st.caption(
-        "Describe your project or paste a meeting transcript to get a structured estimate."
-    )
+    # --- Init session on first load ---
+    if "session_id" not in st.session_state:
+        try:
+            _init_session_state()
+        except Exception as exc:
+            st.error(f"No se pudo conectar con el backend ({API_BASE}): {exc}")
+            st.stop()
 
-    # ---- Estimation form ----
-    with st.form("estimation_form"):
+    # -----------------------------------------------------------------------
+    # SIDEBAR — metadata + controls
+    # -----------------------------------------------------------------------
+    with st.sidebar:
+        st.title("📐 SW Estimator")
+        st.caption(f"Sesión: `{st.session_state.session_id[:8]}…`")
+
+        if st.button("🔄 Nueva conversación", use_container_width=True):
+            try:
+                _init_session_state()
+                st.rerun()
+            except Exception as exc:
+                st.error(f"Error al crear sesión: {exc}")
+
+        st.divider()
+
+        st.subheader("🧠 Contexto del proyecto")
+        st.caption(f"Turno {st.session_state.turn_count} · ventana deslizante activa")
+        _render_project_metadata(st.session_state.project_metadata)
+
+    # -----------------------------------------------------------------------
+    # MAIN — conversation history
+    # -----------------------------------------------------------------------
+    st.header("Conversación")
+
+    for turn in st.session_state.conversation:
+        with st.chat_message("user"):
+            st.write(turn["transcript"])
+        with st.chat_message("assistant"):
+            _render_estimation_result(turn["result"])
+
+    # -----------------------------------------------------------------------
+    # INPUT FORM — transcript + attachments
+    # -----------------------------------------------------------------------
+    st.divider()
+
+    with st.form("turn_form", clear_on_submit=True):
         transcript = st.text_area(
-            "Description",
-            height=180,
+            "Transcripción / descripción del proyecto",
+            height=160,
             placeholder=(
-                "Paste a meeting transcript or write a project description here.\n"
-                "E.g.: 'We need a B2B SaaS with role-based access, Slack notifications "
-                "and an admin dashboard. The team has 2 engineers available part-time.'"
+                "Pega la transcripción de la reunión o describe el proyecto.\n"
+                "Mínimo 20 caracteres. Puedes añadir más detalle en turnos sucesivos."
             ),
         )
 
-        col_a, col_b, col_c = st.columns(3)
-        with col_a:
-            project_type = st.selectbox(
-                "Project type",
-                ["mobile_app", "web_saas", "internal_tool", "data_pipeline"],
-            )
-        with col_b:
-            detail_level = st.selectbox(
-                "Detail level",
-                ["summary", "medium", "detailed"],
-                index=1,
-            )
-        with col_c:
-            output_format = st.selectbox(
-                "Output format",
-                ["phases_table", "line_items", "narrative"],
-            )
+        uploaded_files = st.file_uploader(
+            "Adjuntos opcionales (PDF, DOCX)",
+            type=["pdf", "docx"],
+            accept_multiple_files=True,
+            help="Los documentos se procesan localmente — no se suben al proveedor LLM.",
+        )
 
-        submitted = st.form_submit_button("Generate estimation", type="primary")
+        submitted = st.form_submit_button(
+            "Estimar →", type="primary", use_container_width=True
+        )
 
-    # ---- Process submission ----
+    # -----------------------------------------------------------------------
+    # PROCESS SUBMISSION
+    # -----------------------------------------------------------------------
     if submitted:
         if len(transcript.strip()) < 20:
-            st.error("Description must be at least 20 characters.")
-            return
+            st.error("La descripción debe tener al menos 20 caracteres.")
+            st.stop()
 
-        payload = {
-            "transcript": transcript.strip(),
-            "project_type": project_type,
-            "detail_level": detail_level,
-            "output_format": output_format,
-        }
-
-        with st.spinner("Generating estimation… this may take up to 2 minutes."):
+        with st.spinner("Generando estimación… puede tardar hasta 2 minutos."):
             try:
-                result = call_estimator(payload)
+                result = _call_session_estimate(
+                    st.session_state.session_id,
+                    transcript.strip(),
+                    uploaded_files,
+                )
             except GuardrailError as err:
-                st.error(f"Input rejected ({err.reason}): {err.message}")
-                return
+                st.error(f"Input rechazado ({err.reason}): {err.message}")
+                st.stop()
             except UpstreamError:
-                st.error("The estimation service is unavailable. Try again later.")
-                return
+                st.error("El servicio LLM no está disponible. Inténtalo de nuevo.")
+                st.stop()
             except httpx.TimeoutException:
-                st.error("Request timed out after 120s.")
-                return
+                st.error("Timeout tras 120 s. Inténtalo de nuevo.")
+                st.stop()
+            except httpx.HTTPStatusError as err:
+                st.error(f"Error {err.response.status_code}: {err.response.text[:300]}")
+                st.stop()
             except Exception as exc:  # noqa: BLE001
-                st.error(f"Unexpected error: {exc}")
-                return
+                st.error(f"Error inesperado: {exc}")
+                st.stop()
 
-        st.divider()
-        _render_result(result)
+        # Persist turn locally for display
+        st.session_state.conversation.append(
+            {"transcript": transcript.strip(), "result": result}
+        )
+
+        # Refresh metadata from backend (best-effort)
+        try:
+            info = _get_session_info(st.session_state.session_id)
+            st.session_state.project_metadata = info["project_metadata"]
+            st.session_state.turn_count = info["turn_count"]
+        except Exception:  # noqa: BLE001
+            pass  # metadata panel simply won't update — not critical
+
+        st.rerun()
 
 
 if __name__ == "__main__":

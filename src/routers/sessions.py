@@ -26,6 +26,33 @@ class SessionCreateResponse(BaseModel):
     session_id: str
 
 
+class SessionInfoResponse(BaseModel):
+    """Snapshot of a session's accumulated metadata and turn count."""
+
+    session_id: str
+    turn_count: int
+    project_metadata: dict
+
+
+@router.get(
+    "/sessions/{session_id}",
+    response_model=SessionInfoResponse,
+    summary="Get session info and accumulated project metadata",
+)
+async def get_session(session_id: str) -> SessionInfoResponse:
+    session = session_store.get(session_id)
+    if session is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Session '{session_id}' not found.",
+        )
+    return SessionInfoResponse(
+        session_id=session_id,
+        turn_count=session.history._turn_count(),
+        project_metadata=session.metadata.model_dump(),
+    )
+
+
 @router.post(
     "/sessions",
     response_model=SessionCreateResponse,
