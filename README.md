@@ -112,6 +112,12 @@ docker compose up --build
 
 Levanta `api` + `streamlit` + `redis` en contenedores. Streamlit se comunica con la API via red interna Docker (`http://api:8000`).
 
+## Demo
+
+![Conversación multi-turno con panel de project_metadata](docs/assets/session-3turns.jpg)
+
+*Turno 3 de una sesión: sidebar con contexto acumulado (equipo, tecnologías, alcance) y estimación incremental del nuevo módulo móvil.*
+
 ## Sesiones y adjuntos
 
 ### Crear sesión
