@@ -194,7 +194,11 @@ class Session:
 
     def __init__(self, session_id: str, max_turns: int | None = None) -> None:
         self.session_id = session_id
-        resolved_turns = max_turns if max_turns is not None else get_settings().max_conversation_turns
+        resolved_turns = (
+            max_turns
+            if max_turns is not None
+            else get_settings().max_conversation_turns
+        )
         self.history = ConversationHistory(max_turns=resolved_turns)
         self.metadata = ProjectMetadata()
         self.created_at: datetime = datetime.now(timezone.utc)
