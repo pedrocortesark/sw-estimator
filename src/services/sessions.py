@@ -13,9 +13,14 @@ repository will be a localised change confined to this module.
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from pydantic import BaseModel, Field
+
+from src.core.config import get_settings
+
+if TYPE_CHECKING:
+    from src.schemas.estimation import EstimationRequest
 
 
 # ---------------------------------------------------------------------------
@@ -50,11 +55,10 @@ class ConversationHistory:
 
     Args:
         max_turns: Maximum number of user/assistant pairs to keep.
-            Defaults to 10, which covers roughly 5 minutes of dense
-            conversation while staying well under typical context limits.
+            Defaults to ``settings.max_conversation_turns`` (6).
     """
 
-    def __init__(self, max_turns: int = 10) -> None:
+    def __init__(self, max_turns: int = 6) -> None:
         self.max_turns = max_turns
         self._messages: list[Message] = []
 
@@ -86,6 +90,23 @@ class ConversationHistory:
     def as_dicts(self) -> list[dict[str, str]]:
         """Return the full message list in LLM wire format."""
         return [m.to_dict() for m in self._messages]
+
+    def to_messages_list(self, system_content: str) -> list[dict[str, str]]:
+        """Return the message list with a freshly rendered system prompt.
+
+        Replaces whatever system prompt was stored with *system_content*,
+        keeping all user/assistant turns intact.  This lets callers
+        regenerate the system prompt from the latest ``ProjectMetadata``
+        without mutating the buffer state.
+
+        Args:
+            system_content: Pre-rendered system prompt string.
+
+        Returns:
+            List of ``{role, content}`` dicts ready for any LLM provider.
+        """
+        non_sys = [m.to_dict() for m in self._messages if m.role != "system"]
+        return [{"role": "system", "content": system_content}, *non_sys]
 
     def __len__(self) -> int:
         """Number of messages currently stored (including system prompt)."""
@@ -171,9 +192,10 @@ class Session:
         max_turns: Forwarded to the underlying ConversationHistory buffer.
     """
 
-    def __init__(self, session_id: str, max_turns: int = 10) -> None:
+    def __init__(self, session_id: str, max_turns: int | None = None) -> None:
         self.session_id = session_id
-        self.history = ConversationHistory(max_turns=max_turns)
+        resolved_turns = max_turns if max_turns is not None else get_settings().max_conversation_turns
+        self.history = ConversationHistory(max_turns=resolved_turns)
         self.metadata = ProjectMetadata()
         self.created_at: datetime = datetime.now(timezone.utc)
         self.last_active: datetime = self.created_at
@@ -181,6 +203,44 @@ class Session:
     def touch(self) -> None:
         """Update the last-active timestamp (call on every turn)."""
         self.last_active = datetime.now(timezone.utc)
+
+    def to_messages_list(
+        self,
+        request: EstimationRequest,
+        version: str | None = None,
+    ) -> list[dict[str, str]]:
+        """Build the messages array for the LLM with a fresh system prompt.
+
+        Regenerates the system prompt from the *current* ``self.metadata``
+        so that every turn benefits from accumulated context (project name,
+        team size, technologies, agreed scope) without requiring the caller
+        to manage prompt state separately.
+
+        The lazy import of ``render_estimation_prompt`` breaks the
+        ``sessions → loader → sessions`` circular dependency at import time
+        while keeping this convenience method on the domain object.
+
+        Args:
+            request: The current ``EstimationRequest`` (provides transcript
+                and any per-request overrides used by the Jinja2 templates).
+            version: Prompt template version.  Defaults to
+                ``settings.prompt_version`` when ``None``.
+
+        Returns:
+            List of ``{role, content}`` dicts in LLM wire format:
+            ``[system, ...user/assistant turns...]``
+        """
+        # Lazy import to avoid circular dependency:
+        #   sessions.py → loader.py → sessions.py (ProjectMetadata)
+        from src.prompts.loader import render_estimation_prompt  # noqa: PLC0415
+
+        resolved_version = version or get_settings().prompt_version
+        system_content, _ = render_estimation_prompt(
+            request,
+            version=resolved_version,
+            project_metadata=self.metadata,
+        )
+        return self.history.to_messages_list(system_content)
 
 
 # ---------------------------------------------------------------------------
@@ -211,7 +271,7 @@ class SessionStore:
         """Return an existing session or ``None`` if it does not exist."""
         return self._store.get(session_id)
 
-    def get_or_create(self, session_id: str, max_turns: int = 10) -> Session:
+    def get_or_create(self, session_id: str, max_turns: int | None = None) -> Session:
         """Return the session for *session_id*, creating it if absent."""
         if session_id not in self._store:
             self._store[session_id] = Session(session_id, max_turns=max_turns)
