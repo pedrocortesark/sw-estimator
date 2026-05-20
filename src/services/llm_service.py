@@ -27,7 +27,6 @@ from src.services.llm_wrapper import get_llm_wrapper, get_router, stream_complet
 from src.services.pricing import calculate_cost
 
 
-
 def _build_system_prompt() -> str:
     """Build the system prompt with few-shot examples injected.
 
@@ -151,7 +150,9 @@ async def stream_estimation(
     primary_model = settings.llm_models[0] if settings.llm_models else "unknown"
 
     system_prompt, user_message = render_estimation_prompt(
-        request, version=prompt_version or get_settings().prompt_version, model=primary_model
+        request,
+        version=prompt_version or get_settings().prompt_version,
+        model=primary_model,
     )
 
     call_logger = logger.bind(endpoint="/estimate/stream", mode="stream")

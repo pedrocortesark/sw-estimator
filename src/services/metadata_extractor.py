@@ -31,26 +31,88 @@ from src.services.sessions import ProjectMetadata
 
 _TECH_VOCAB: list[str] = [
     # Languages
-    "Python", "TypeScript", "JavaScript", "Java", "Go", "Rust", "Ruby", "PHP",
-    "Swift", "Kotlin", "C#", ".NET", "Scala",
+    "Python",
+    "TypeScript",
+    "JavaScript",
+    "Java",
+    "Go",
+    "Rust",
+    "Ruby",
+    "PHP",
+    "Swift",
+    "Kotlin",
+    "C#",
+    ".NET",
+    "Scala",
     # Frontend
-    "React", "Vue", "Angular", "Next.js", "Nuxt", "Svelte", "Tailwind",
+    "React",
+    "Vue",
+    "Angular",
+    "Next.js",
+    "Nuxt",
+    "Svelte",
+    "Tailwind",
     # Backend / API
-    "FastAPI", "Django", "Flask", "Express", "NestJS", "Spring Boot", "Rails",
-    "GraphQL", "REST", "gRPC", "WebSocket",
+    "FastAPI",
+    "Django",
+    "Flask",
+    "Express",
+    "NestJS",
+    "Spring Boot",
+    "Rails",
+    "GraphQL",
+    "REST",
+    "gRPC",
+    "WebSocket",
     # Mobile
-    "React Native", "Flutter", "iOS", "Android",
+    "React Native",
+    "Flutter",
+    "iOS",
+    "Android",
     # Data & AI
-    "PostgreSQL", "MySQL", "MongoDB", "Redis", "Elasticsearch", "Kafka",
-    "Spark", "dbt", "Airflow", "Pandas", "NumPy", "PyTorch", "TensorFlow",
-    "scikit-learn", "LangChain", "OpenAI", "Anthropic",
+    "PostgreSQL",
+    "MySQL",
+    "MongoDB",
+    "Redis",
+    "Elasticsearch",
+    "Kafka",
+    "Spark",
+    "dbt",
+    "Airflow",
+    "Pandas",
+    "NumPy",
+    "PyTorch",
+    "TensorFlow",
+    "scikit-learn",
+    "LangChain",
+    "OpenAI",
+    "Anthropic",
     # Cloud & Infra
-    "AWS", "Azure", "GCP", "Docker", "Kubernetes", "Terraform", "Ansible",
-    "S3", "Lambda", "EC2", "RDS", "BigQuery", "Snowflake",
+    "AWS",
+    "Azure",
+    "GCP",
+    "Docker",
+    "Kubernetes",
+    "Terraform",
+    "Ansible",
+    "S3",
+    "Lambda",
+    "EC2",
+    "RDS",
+    "BigQuery",
+    "Snowflake",
     # Auth & security
-    "OAuth", "JWT", "Auth0", "Keycloak",
+    "OAuth",
+    "JWT",
+    "Auth0",
+    "Keycloak",
     # Other
-    "Stripe", "Twilio", "SendGrid", "Firebase", "Supabase", "Hasura",
+    "Stripe",
+    "Twilio",
+    "SendGrid",
+    "Firebase",
+    "Supabase",
+    "Hasura",
 ]
 
 # Pre-compiled pattern: matches any vocabulary word (word-boundary aware)
@@ -61,9 +123,18 @@ _TECH_PATTERN = re.compile(
 
 # Patterns that suggest a project name in the transcript
 _NAME_PATTERNS: list[re.Pattern[str]] = [
-    re.compile(r"(?:project|app|platform|system|tool|product)\s+(?:called|named|is)\s+[\"']?([A-Z][A-Za-z0-9 _-]{1,40})[\"']?", re.IGNORECASE),
-    re.compile(r"(?:build|develop|create)\s+[\"']([A-Z][A-Za-z0-9 _-]{1,40})[\"']", re.IGNORECASE),
-    re.compile(r"the\s+([A-Z][A-Za-z0-9]+(?:\s[A-Z][A-Za-z0-9]+)?)\s+(?:project|platform|app|system)", re.IGNORECASE),
+    re.compile(
+        r"(?:project|app|platform|system|tool|product)\s+(?:called|named|is)\s+[\"']?([A-Z][A-Za-z0-9 _-]{1,40})[\"']?",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"(?:build|develop|create)\s+[\"']([A-Z][A-Za-z0-9 _-]{1,40})[\"']",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"the\s+([A-Z][A-Za-z0-9]+(?:\s[A-Z][A-Za-z0-9]+)?)\s+(?:project|platform|app|system)",
+        re.IGNORECASE,
+    ),
 ]
 
 

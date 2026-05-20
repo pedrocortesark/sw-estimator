@@ -107,7 +107,12 @@ class EstimationService:
     # Public interface
     # ------------------------------------------------------------------
 
-    async def estimate(self, request: EstimationRequest, project_metadata=None, prompt_version: str | None = None) -> EstimationResponse:
+    async def estimate(
+        self,
+        request: EstimationRequest,
+        project_metadata=None,
+        prompt_version: str | None = None,
+    ) -> EstimationResponse:
         """Run the estimation pipeline and return a structured response.
 
         Args:
@@ -141,7 +146,9 @@ class EstimationService:
             )
 
         # --- Layer 3: prompt rendering -----------------------------------
-        system_prompt, user_prompt = self._render_prompts(request, project_metadata=project_metadata, version=version)
+        system_prompt, user_prompt = self._render_prompts(
+            request, project_metadata=project_metadata, version=version
+        )
 
         # --- Layer 4: LLM structured call --------------------------------
         estimation_result, meta = await self._call_llm(
@@ -152,7 +159,9 @@ class EstimationService:
         estimation_result = self._run_output_guardrails(estimation_result)
         self._store_cache(request, estimation_result)
 
-        return self._build_response(estimation_result, meta, cached=False, prompt_version=version)
+        return self._build_response(
+            estimation_result, meta, cached=False, prompt_version=version
+        )
 
     # ------------------------------------------------------------------
     # Layer implementations (one private method per layer)
@@ -205,7 +214,12 @@ class EstimationService:
         # Fallback: module-level in-memory dict
         return _IN_MEMORY_CACHE.get(self._cache_key(request))
 
-    def _render_prompts(self, request: EstimationRequest, project_metadata=None, version: str | None = None) -> tuple[str, str]:
+    def _render_prompts(
+        self,
+        request: EstimationRequest,
+        project_metadata=None,
+        version: str | None = None,
+    ) -> tuple[str, str]:
         """Layer 3 — render Jinja2 templates into (system_prompt, user_prompt)."""
         return render_estimation_prompt(
             request,

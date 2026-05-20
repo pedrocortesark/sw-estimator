@@ -118,7 +118,9 @@ async def session_estimate(
     result = await service.estimate(request, project_metadata=session.metadata)
 
     # Update accumulated project facts from this turn's response.
-    session.metadata = update_from_result(transcript, result.estimation, session.metadata)
+    session.metadata = update_from_result(
+        transcript, result.estimation, session.metadata
+    )
 
     # Persist the turn so future requests in this session have context.
     session.history.add_user(transcript)
