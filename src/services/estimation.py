@@ -186,7 +186,7 @@ class EstimationService:
         data = json.dumps(
             {
                 "transcript": request.transcript,
-                "provider": request.provider,
+                "provider": getattr(request, "provider", None),
                 "project_type": request.project_type,
                 "detail_level": request.detail_level,
                 "output_format": request.output_format,
@@ -247,17 +247,18 @@ class EstimationService:
         from src.core.exceptions import UnknownProviderError
         from src.services.llm_service import generate_estimation
 
-        if request.provider is not None and request.provider not in (
+        provider = getattr(request, "provider", None)
+        if provider is not None and provider not in (
             "openai",
             "anthropic",
         ):
             raise UnknownProviderError(
-                f"Unsupported provider: '{request.provider}'. Use 'openai' or 'anthropic'."
+                f"Unsupported provider: '{provider}'. Use 'openai' or 'anthropic'."
             )
 
         result_dict = await generate_estimation(
             transcript=request.transcript,
-            provider_override=request.provider,
+            provider_override=provider,
         )
         meta = {
             "provider": result_dict["provider"],
