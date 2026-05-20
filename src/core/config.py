@@ -24,6 +24,13 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     api_base_url: str = "http://localhost:8000"
 
+    # --- Prompt ---
+    # Active Jinja2 prompt version.  Must match a directory under
+    # src/prompts/estimation/ (e.g. "v1", "v2").
+    # Override in .env to switch globally; the per-request ?prompt_version=
+    # query param takes precedence when explicitly supplied.
+    prompt_version: str = "v1"
+
     # --- LLM Provider ---
     # Which provider to use for Instructor-based structured calls.
     # Can be overridden per-request via the EstimationRequest.provider field.

@@ -29,7 +29,7 @@ router = APIRouter(prefix="/api/v1", tags=["Estimation"])
 )
 async def estimate(
     request: EstimationRequest,
-    prompt_version: Annotated[str, Query(pattern=r"^v[0-9]+$")] = "v1",
+    prompt_version: Annotated[str | None, Query(pattern=r"^v[0-9]+$")] = None,
     service: EstimationService = Depends(get_estimation_service),
 ) -> EstimationResponse:
     """POST /api/v1/estimate
@@ -43,7 +43,7 @@ async def estimate(
     in main.py (InputGuardrailViolation → 400, InstructorRetryException → 502,
     UnknownProviderError → 400, etc.).
     """
-    return await service.estimate(request)
+    return await service.estimate(request, prompt_version=prompt_version)
 
 
 @router.post(
@@ -58,7 +58,7 @@ async def estimate(
 )
 async def estimate_stream(
     request: EstimationRequest,
-    prompt_version: Annotated[str, Query(pattern=r"^v[0-9]+$")] = "v1",
+    prompt_version: Annotated[str | None, Query(pattern=r"^v[0-9]+$")] = None,
 ) -> StreamingResponse:
     """POST /api/v1/estimate/stream"""
 

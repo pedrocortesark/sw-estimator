@@ -24,6 +24,7 @@ from pathlib import Path
 from jinja2 import Environment, FileSystemLoader, StrictUndefined, TemplateNotFound
 
 from src.schemas.estimation import EstimationRequest
+from src.services.sessions import ProjectMetadata
 
 # Root of all templates = the directory that contains this file.
 _TEMPLATES_DIR = Path(__file__).parent
@@ -57,6 +58,7 @@ def render_estimation_prompt(
     version: str = "v1",
     model: str | None = None,
     prompt_style: str | None = None,
+    project_metadata: ProjectMetadata | None = None,
 ) -> tuple[str, str]:
     """Render the system and user prompts for the given request.
 
@@ -82,6 +84,7 @@ def render_estimation_prompt(
         "output_format": _val("output_format", "phases_table"),
         "prompt_style": prompt_style or _infer_prompt_style(model),
         "reference_projects": getattr(request, "reference_projects", None) or [],
+        "project_metadata": project_metadata or ProjectMetadata(),
     }
 
     try:

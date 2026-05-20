@@ -161,6 +161,31 @@ al transcript antes de la llamada al LLM:
 - **Base para RAG.** El texto en memoria está listo para ser troceado e
   indexado en el módulo de retrieval, sin pasos adicionales.
 
+### Project metadata — extracción heurística vs. LLM extractor
+
+Tras cada respuesta del LLM el sistema actualiza automáticamente el `ProjectMetadata`
+de la sesión (nombre del proyecto, tamaño del equipo, tecnologías, scope) para
+inyectarlo en el system prompt del siguiente turno.
+
+Se eligió **extracción heurística** sobre un segundo LLM extractor por estas razones:
+
+- **El LLM ya devuelve datos estructurados.** `EstimationResult` contiene
+  `team_composition` (de donde se extrae `assumed_team_size` directamente como suma
+  de headcounts) y `executive_summary` (que se usa como `agreed_scope` sin ningún
+  parsing).  No tiene sentido pagar una segunda llamada al LLM para reobtener
+  información que ya está en el objeto Python.
+- **Coste cero por turno.** Cada llamada a un LLM extractor costaría ~$0.001 y
+  ~300 ms adicionales.  En una sesión de 10 turnos eso es 10 llamadas extra que
+  no aportan información nueva.
+- **La única debilidad real es la detección de tecnologías**, que depende de un
+  vocabulario curado en `metadata_extractor.py`.  Ese vocabulario es trivial de
+  extender y cubre la gran mayoría de stacks reales.
+
+El módulo `src/services/metadata_extractor.py` implementa la lógica.  Si en el
+futuro la precisión en detección de tecnologías fuera insuficiente, se puede
+sustituir únicamente `_extract_technologies()` por una llamada LLM sin tocar el
+resto del pipeline.
+
 ## Caché
 
 | Tipo | Tecnología | Cuando aplica |

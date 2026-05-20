@@ -14,6 +14,7 @@ from src.services.document_extractor import (
     extract_text,
 )
 from src.services.estimation import EstimationService
+from src.services.metadata_extractor import update_from_result
 from src.services.sessions import session_store
 
 router = APIRouter(prefix="/api/v1", tags=["Sessions"])
@@ -114,7 +115,10 @@ async def session_estimate(
         )
 
     request = EstimationRequest(transcript=combined)
-    result = await service.estimate(request)
+    result = await service.estimate(request, project_metadata=session.metadata)
+
+    # Update accumulated project facts from this turn's response.
+    session.metadata = update_from_result(transcript, result.estimation, session.metadata)
 
     # Persist the turn so future requests in this session have context.
     session.history.add_user(transcript)
