@@ -151,7 +151,7 @@ async def session_estimate(
 
     # Persist the turn so future requests in this session have context.
     session.history.add_user(transcript)
-    session.history.add_assistant(result.executive_summary)
+    session.history.add_assistant(result.estimation.executive_summary)
     session.touch()
 
     return result
