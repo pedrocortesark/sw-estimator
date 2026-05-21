@@ -35,6 +35,7 @@ build-backend = "hatchling.build"
 
 [dependency-groups]
 dev = [
+    "deepeval>=2.0.0",
     "pytest>=9.0.3",
     "pytest-asyncio>=1.3.0",
 ]
@@ -48,3 +49,9 @@ packages = ["src"]
 asyncio_mode = "auto"
 # Only look for tests inside the tests/ directory
 testpaths = ["tests"]
+markers = [
+    "golden: marks tests that call a live LLM to evaluate the golden dataset (deselect with -m 'not golden')",
+    "hard: Family 1 — structural and numerical assertions on LLM output (live LLM, fast per test)",
+    "soft: Family 2 — statistical consistency tests; N_RUNS calls per case (live LLM, slow)",
+    "judge: Family 3 — LLM-as-judge quality evaluation via DeepEval GEval (live LLM + judge call)",
+]
