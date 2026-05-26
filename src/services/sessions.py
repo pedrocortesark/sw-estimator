@@ -203,6 +203,8 @@ class Session:
         self.metadata = ProjectMetadata()
         self.anchors: list[str] = []
         self.accumulated_summary: str = ""
+        self.last_resolved_tier: str = "unknown"
+        self.last_tier_rule: str = "no_match"
         self.created_at: datetime = datetime.now(timezone.utc)
         self.last_active: datetime = self.created_at
 

@@ -17,6 +17,7 @@ from src.services.estimation import EstimationService
 from src.services.metadata_extractor import update_from_result
 from src.services.sessions import session_store
 from src.services.summarizer import update_summary
+from src.services.tier_resolver import resolve_tier
 
 router = APIRouter(prefix="/api/v1", tags=["Sessions"])
 
@@ -144,6 +145,11 @@ async def session_estimate(
 
     request = EstimationRequest(transcript=combined)
     result = await service.estimate(request, project_metadata=session.metadata)
+
+    # Resolve the project tier from the latest result + current metadata.
+    tier, rule = resolve_tier(session.metadata, result.estimation)
+    session.last_resolved_tier = tier
+    session.last_tier_rule = rule
 
     # Snapshot metadata BEFORE updating so update_anchors can compare.
     previous_metadata = session.metadata.model_copy(deep=True)
