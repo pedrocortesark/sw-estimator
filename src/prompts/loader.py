@@ -98,3 +98,17 @@ def render_estimation_prompt(
             f"Unknown prompt version '{version}'. Available versions: {available}"
         )
     return system, user
+
+
+def render_summarizer_prompt(previous_summary: str, messages: list[dict]) -> str:
+    """Render the summarizer prompt for the given conversation messages.
+
+    Args:
+        previous_summary: Accumulated summary from previous turns (may be empty).
+        messages: Current conversation messages in ``{role, content}`` format.
+
+    Returns:
+        Rendered prompt string ready to send as a user message.
+    """
+    template = _env.get_template("summarizer/v1.j2")
+    return template.render(previous_summary=previous_summary, messages=messages)

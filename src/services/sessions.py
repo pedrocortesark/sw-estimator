@@ -202,8 +202,14 @@ class Session:
         self.history = ConversationHistory(max_turns=resolved_turns)
         self.metadata = ProjectMetadata()
         self.anchors: list[str] = []
+        self.accumulated_summary: str = ""
         self.created_at: datetime = datetime.now(timezone.utc)
         self.last_active: datetime = self.created_at
+
+    @property
+    def summary_chars(self) -> int:
+        """Number of characters in the accumulated summary."""
+        return len(self.accumulated_summary)
 
     def touch(self) -> None:
         """Update the last-active timestamp (call on every turn)."""

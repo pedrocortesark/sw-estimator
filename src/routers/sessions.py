@@ -16,6 +16,7 @@ from src.services.document_extractor import (
 from src.services.estimation import EstimationService
 from src.services.metadata_extractor import update_from_result
 from src.services.sessions import session_store
+from src.services.summarizer import update_summary
 
 router = APIRouter(prefix="/api/v1", tags=["Sessions"])
 
@@ -154,6 +155,9 @@ async def session_estimate(
 
     # Detect and record stable facts between the two metadata snapshots.
     session.update_anchors(previous_metadata, session.metadata)
+
+    # Compress the current window into a summary before it gets evicted.
+    await update_summary(session)
 
     # Persist the turn so future requests in this session have context.
     session.history.add_user(transcript)
