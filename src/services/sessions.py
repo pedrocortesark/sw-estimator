@@ -201,12 +201,47 @@ class Session:
         )
         self.history = ConversationHistory(max_turns=resolved_turns)
         self.metadata = ProjectMetadata()
+        self.anchors: list[str] = []
         self.created_at: datetime = datetime.now(timezone.utc)
         self.last_active: datetime = self.created_at
 
     def touch(self) -> None:
         """Update the last-active timestamp (call on every turn)."""
         self.last_active = datetime.now(timezone.utc)
+
+    def update_anchors(self, previous: ProjectMetadata, new: ProjectMetadata) -> None:
+        """Detect stable facts between two consecutive turns and record them.
+
+        An "anchor" is a fact that has remained unchanged between *previous*
+        and *new* metadata.  Only non-None values are considered stable.
+        Anchors are deduplicated: adding the same anchor twice is a no-op.
+
+        Args:
+            previous: Metadata snapshot from *before* this turn.
+            new: Metadata snapshot from *after* this turn.
+        """
+
+        def _add(anchor: str) -> None:
+            if anchor not in self.anchors:
+                self.anchors.append(anchor)
+
+        if (
+            previous.project_name is not None
+            and previous.project_name == new.project_name
+        ):
+            _add(f"project_name:{new.project_name}")
+
+        if (
+            previous.assumed_team_size is not None
+            and previous.assumed_team_size == new.assumed_team_size
+        ):
+            _add(f"team_size:{new.assumed_team_size}")
+
+        common_techs = set(t.lower() for t in previous.mentioned_technologies) & set(
+            t.lower() for t in new.mentioned_technologies
+        )
+        for tech in sorted(common_techs):
+            _add(f"tech:{tech}")
 
     def to_messages_list(
         self,

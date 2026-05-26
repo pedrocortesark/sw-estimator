@@ -144,10 +144,16 @@ async def session_estimate(
     request = EstimationRequest(transcript=combined)
     result = await service.estimate(request, project_metadata=session.metadata)
 
+    # Snapshot metadata BEFORE updating so update_anchors can compare.
+    previous_metadata = session.metadata.model_copy(deep=True)
+
     # Update accumulated project facts from this turn's response.
     session.metadata = update_from_result(
         transcript, result.estimation, session.metadata
     )
+
+    # Detect and record stable facts between the two metadata snapshots.
+    session.update_anchors(previous_metadata, session.metadata)
 
     # Persist the turn so future requests in this session have context.
     session.history.add_user(transcript)

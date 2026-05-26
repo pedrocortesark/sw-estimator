@@ -64,7 +64,9 @@ _MOCK_RESULT = EstimationResult(
     ],
     total_hours=120.0,
     total_cost_usd=12000.0,
-    team_composition=[TeamMember(role="Full-stack Engineer", count=3, dedication="100%")],
+    team_composition=[
+        TeamMember(role="Full-stack Engineer", count=3, dedication="100%")
+    ],
     duration_weeks=4.0,
 )
 
@@ -137,7 +139,9 @@ async def _new_session(client: AsyncClient) -> str:
     return resp.json()["session_id"]
 
 
-async def _estimate(client: AsyncClient, session_id: str, transcript: str, files=None) -> dict:
+async def _estimate(
+    client: AsyncClient, session_id: str, transcript: str, files=None
+) -> dict:
     """POST /api/v1/sessions/{id}/estimate and return the JSON body."""
     data = {"transcript": transcript}
     resp = await client.post(
@@ -181,7 +185,9 @@ async def test_metadata_accumulates_across_turns(session_client: AsyncClient) ->
     )
     assert "React" in meta1["mentioned_technologies"]
     assert "PostgreSQL" in meta1["mentioned_technologies"]
-    assert meta1["agreed_scope"] is not None, "agreed_scope must be set from executive_summary"
+    assert meta1["agreed_scope"] is not None, (
+        "agreed_scope must be set from executive_summary"
+    )
 
     await _estimate(session_client, sid, _TRANSCRIPT_TURN_2)
 
@@ -254,7 +260,9 @@ async def test_pdf_attachment_text_reaches_service(session_client: AsyncClient) 
     resp = await session_client.post(
         f"/api/v1/sessions/{sid}/estimate",
         data={"transcript": base_transcript},
-        files=[("attachments", ("spec.pdf", io.BytesIO(minimal_pdf), "application/pdf"))],
+        files=[
+            ("attachments", ("spec.pdf", io.BytesIO(minimal_pdf), "application/pdf"))
+        ],
     )
 
     # Even if pypdf cannot parse this minimal PDF, the endpoint must not 500.
@@ -308,4 +316,43 @@ async def test_sliding_window_caps_history(session_client: AsyncClient) -> None:
     assert info["turn_count"] == max_turns, (
         f"After {n_turns} turns, expected turn_count={max_turns} "
         f"(sliding window), got {info['turn_count']}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Test 4 — Anchors: stable facts are detected and recorded
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_anchors_recorded_after_stable_turns(session_client: AsyncClient) -> None:
+    """After two turns that produce the same team_size, an anchor must exist.
+
+    The mock result always returns team_composition with 3 engineers, so
+    assumed_team_size is set to 3 on turn 1 and remains 3 on turn 2.
+    After turn 2, update_anchors must detect the stable value and record it.
+    """
+    sid = await _new_session(session_client)
+
+    await _estimate(session_client, sid, _TRANSCRIPT_TURN_1)
+    await _estimate(session_client, sid, _TRANSCRIPT_TURN_2)
+
+    session = session_store._store[sid]
+    assert any(a.startswith("team_size:") for a in session.anchors), (
+        "Expected a team_size anchor after two turns with the same team composition"
+    )
+
+
+@pytest.mark.asyncio
+async def test_anchors_no_duplicates_via_http(session_client: AsyncClient) -> None:
+    """Running 4 turns with the same stable team_size never duplicates anchors."""
+    sid = await _new_session(session_client)
+
+    for _ in range(4):
+        await _estimate(session_client, sid, _TRANSCRIPT_TURN_1)
+
+    session = session_store._store[sid]
+    team_anchors = [a for a in session.anchors if a.startswith("team_size:")]
+    assert len(team_anchors) == 1, (
+        f"team_size anchor should appear exactly once, got: {team_anchors}"
     )
