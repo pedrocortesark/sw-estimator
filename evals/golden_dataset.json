@@ -1,0 +1,290 @@
+[
+  {
+    "id": "gc-01",
+    "description": "Landing page SaaS corporativa — starter, muy acotado",
+    "input": {
+      "transcript": "El cliente necesita una landing page para su producto SaaS. Cinco secciones: hero, features, pricing con tres planes, formulario de contacto que envía emails y footer. El diseño está en Figma. Sin autenticación ni base de datos.",
+      "project_type": "web_saas",
+      "detail_level": "summary",
+      "output_format": "narrative"
+    },
+    "expected": {
+      "total_cost_usd_min": 1500,
+      "total_cost_usd_max": 8000,
+      "total_hours_min": 16,
+      "total_hours_max": 80,
+      "required_keywords": ["frontend", "formulario"],
+      "schema_valid": true
+    }
+  },
+  {
+    "id": "gc-02",
+    "description": "Plataforma SaaS de gestión de facturas — standard",
+    "input": {
+      "transcript": "Necesitamos una plataforma web para gestionar facturas: los usuarios pueden crear, editar y enviar facturas en PDF a clientes. Requiere autenticación, roles de admin y contable, almacenamiento en S3 y pasarela de pago con Stripe. El equipo disponible es de 3 ingenieros.",
+      "project_type": "web_saas",
+      "detail_level": "medium",
+      "output_format": "phases_table"
+    },
+    "expected": {
+      "total_cost_usd_min": 18000,
+      "total_cost_usd_max": 85000,
+      "total_hours_min": 200,
+      "total_hours_max": 900,
+      "required_keywords": ["autenticación", "Stripe", "backend"],
+      "schema_valid": true
+    }
+  },
+  {
+    "id": "gc-03",
+    "description": "Marketplace SaaS con múltiples vendedores — enterprise",
+    "input": {
+      "transcript": "Queremos construir un marketplace multi-vendor donde proveedores puedan publicar catálogos de productos, gestionar inventario en tiempo real y recibir pagos. Necesita panel de administración, búsqueda avanzada con Elasticsearch, microservicios con Kubernetes, integración con tres ERPs distintos y soporte multiidioma. El equipo estimado es de 12 ingenieros.",
+      "project_type": "web_saas",
+      "detail_level": "detailed",
+      "output_format": "line_items"
+    },
+    "expected": {
+      "total_cost_usd_min": 85000,
+      "total_cost_usd_max": 600000,
+      "total_hours_min": 900,
+      "total_hours_max": 6000,
+      "required_keywords": ["microservicios", "Kubernetes", "marketplace"],
+      "schema_valid": true
+    }
+  },
+  {
+    "id": "gc-04",
+    "description": "Plataforma web con requisitos ambiguos — scope incierto",
+    "input": {
+      "transcript": "El cliente quiere una plataforma digital para mejorar la experiencia de sus usuarios. Algo moderno, con inteligencia artificial y que escale bien. No tenemos más detalles por ahora.",
+      "project_type": "web_saas",
+      "detail_level": "summary",
+      "output_format": "narrative"
+    },
+    "expected": {
+      "total_cost_usd_min": 0,
+      "total_cost_usd_max": 500000,
+      "total_hours_min": 0,
+      "total_hours_max": 5000,
+      "required_keywords": [],
+      "schema_valid": true
+    }
+  },
+  {
+    "id": "gc-05",
+    "description": "App móvil de seguimiento de hábitos — starter",
+    "input": {
+      "transcript": "App iOS y Android para seguimiento de hábitos diarios. El usuario define hábitos, marca si los completó cada día y ve estadísticas semanales. Sin backend propio: usaremos Firebase para autenticación y base de datos. Diseño minimalista ya definido.",
+      "project_type": "mobile_app",
+      "detail_level": "medium",
+      "output_format": "phases_table"
+    },
+    "expected": {
+      "total_cost_usd_min": 8000,
+      "total_cost_usd_max": 35000,
+      "total_hours_min": 80,
+      "total_hours_max": 350,
+      "required_keywords": ["Firebase", "iOS", "Android"],
+      "schema_valid": true
+    }
+  },
+  {
+    "id": "gc-06",
+    "description": "App móvil de telefonía corporativa — standard",
+    "input": {
+      "transcript": "Necesitamos una app móvil para iOS y Android que permita a los empleados gestionar tickets de soporte interno, recibir notificaciones push, acceder a un directorio de contactos sincronizado con Active Directory y chatear en tiempo real con otros empleados. La app debe funcionar offline con sincronización posterior.",
+      "project_type": "mobile_app",
+      "detail_level": "detailed",
+      "output_format": "line_items"
+    },
+    "expected": {
+      "total_cost_usd_min": 30000,
+      "total_cost_usd_max": 120000,
+      "total_hours_min": 300,
+      "total_hours_max": 1200,
+      "required_keywords": ["notificaciones", "offline", "sincronización"],
+      "schema_valid": true
+    }
+  },
+  {
+    "id": "gc-07",
+    "description": "Superapp móvil de servicios financieros — enterprise",
+    "input": {
+      "transcript": "Proyecto de superapp financiera para Latinoamérica: wallet digital, transferencias P2P, créditos instantáneos, seguro de viaje y marketplace de beneficios. Requiere integración con 8 bancos locales vía APIs reguladas, cumplimiento PCI-DSS, biometría facial para onboarding, soporte en 6 países con diferentes regulaciones fiscales y un equipo de 15 ingenieros.",
+      "project_type": "mobile_app",
+      "detail_level": "detailed",
+      "output_format": "line_items"
+    },
+    "expected": {
+      "total_cost_usd_min": 200000,
+      "total_cost_usd_max": 1500000,
+      "total_hours_min": 2000,
+      "total_hours_max": 15000,
+      "required_keywords": ["PCI-DSS", "biometría", "integración"],
+      "schema_valid": true
+    }
+  },
+  {
+    "id": "gc-08",
+    "description": "App móvil de recetas de cocina — starter simple",
+    "input": {
+      "transcript": "App móvil solo para iOS con recetas de cocina. Los usuarios pueden buscar recetas por ingrediente, guardar favoritas y ver el paso a paso con fotos. El contenido se carga desde una API pública de recetas. Sin login.",
+      "project_type": "mobile_app",
+      "detail_level": "summary",
+      "output_format": "narrative"
+    },
+    "expected": {
+      "total_cost_usd_min": 3000,
+      "total_cost_usd_max": 15000,
+      "total_hours_min": 30,
+      "total_hours_max": 150,
+      "required_keywords": ["iOS", "búsqueda"],
+      "schema_valid": true
+    }
+  },
+  {
+    "id": "gc-09",
+    "description": "Herramienta interna de onboarding de empleados — starter",
+    "input": {
+      "transcript": "Necesitamos una herramienta web interna para gestionar el onboarding de nuevos empleados. El manager asigna tareas, el empleado las marca como completadas y RRHH ve el progreso. Integración con Slack para notificaciones. 20 usuarios máximo.",
+      "project_type": "internal_tool",
+      "detail_level": "medium",
+      "output_format": "phases_table"
+    },
+    "expected": {
+      "total_cost_usd_min": 5000,
+      "total_cost_usd_max": 25000,
+      "total_hours_min": 50,
+      "total_hours_max": 250,
+      "required_keywords": ["Slack", "notificaciones", "dashboard"],
+      "schema_valid": true
+    }
+  },
+  {
+    "id": "gc-10",
+    "description": "Sistema de aprobación de presupuestos — standard",
+    "input": {
+      "transcript": "El departamento financiero necesita un sistema interno para gestionar solicitudes de presupuesto. Los empleados abren solicitudes con adjuntos, los managers aprueban o rechazan con comentarios, el CFO tiene vista consolidada. Flujo de aprobación configurable por importe. Integración con el ERP SAP para registrar los aprobados automáticamente.",
+      "project_type": "internal_tool",
+      "detail_level": "detailed",
+      "output_format": "line_items"
+    },
+    "expected": {
+      "total_cost_usd_min": 20000,
+      "total_cost_usd_max": 80000,
+      "total_hours_min": 200,
+      "total_hours_max": 800,
+      "required_keywords": ["aprobación", "SAP", "flujo"],
+      "schema_valid": true
+    }
+  },
+  {
+    "id": "gc-11",
+    "description": "Plataforma interna de analítica de ventas — standard",
+    "input": {
+      "transcript": "Queremos un dashboard interno para que el equipo comercial visualice KPIs de ventas en tiempo real: pipeline por rep, forecast mensual, análisis de churn y cohorts de clientes. Los datos vienen de Salesforce y una base de datos PostgreSQL propia. 50 usuarios. El equipo es de 4 ingenieros.",
+      "project_type": "internal_tool",
+      "detail_level": "detailed",
+      "output_format": "phases_table"
+    },
+    "expected": {
+      "total_cost_usd_min": 25000,
+      "total_cost_usd_max": 90000,
+      "total_hours_min": 250,
+      "total_hours_max": 900,
+      "required_keywords": ["dashboard", "Salesforce", "PostgreSQL"],
+      "schema_valid": true
+    }
+  },
+  {
+    "id": "gc-12",
+    "description": "API REST para exportar reportes contables — starter",
+    "input": {
+      "transcript": "Necesitamos una API REST que genere reportes contables en PDF y Excel a partir de transacciones almacenadas en nuestra base de datos PostgreSQL. Los clientes se autentican con API key. Sin interfaz gráfica. El equipo es de 2 ingenieros.",
+      "project_type": "internal_tool",
+      "detail_level": "medium",
+      "output_format": "narrative"
+    },
+    "expected": {
+      "total_cost_usd_min": 5000,
+      "total_cost_usd_max": 20000,
+      "total_hours_min": 50,
+      "total_hours_max": 200,
+      "required_keywords": ["API", "PostgreSQL", "autenticación"],
+      "schema_valid": true
+    }
+  },
+  {
+    "id": "gc-13",
+    "description": "Pipeline ETL de datos de sensores IoT — standard",
+    "input": {
+      "transcript": "Tenemos 500 sensores industriales que envían lecturas cada 5 segundos. Necesitamos un pipeline que ingeste esos datos en tiempo real con Apache Kafka, los limpie, detecte anomalías con reglas configurable y los almacene en ClickHouse para consultas analíticas. Alertas automáticas por email cuando se detecte una anomalía.",
+      "project_type": "data_pipeline",
+      "detail_level": "detailed",
+      "output_format": "line_items"
+    },
+    "expected": {
+      "total_cost_usd_min": 25000,
+      "total_cost_usd_max": 100000,
+      "total_hours_min": 250,
+      "total_hours_max": 1000,
+      "required_keywords": ["Kafka", "pipeline", "anomalías"],
+      "schema_valid": true
+    }
+  },
+  {
+    "id": "gc-14",
+    "description": "Migración de data warehouse on-premise a cloud — enterprise",
+    "input": {
+      "transcript": "La empresa quiere migrar su data warehouse Oracle de 10TB a Snowflake en AWS. Se deben migrar 200 tablas, reescribir 80 procedimientos almacenados PL/SQL a dbt, implementar un catálogo de datos con DataHub, establecer SLAs de calidad con Great Expectations y reentrenar al equipo de analistas. El proyecto requiere 10 ingenieros y tolerancia cero a pérdida de datos.",
+      "project_type": "data_pipeline",
+      "detail_level": "detailed",
+      "output_format": "line_items"
+    },
+    "expected": {
+      "total_cost_usd_min": 100000,
+      "total_cost_usd_max": 600000,
+      "total_hours_min": 1000,
+      "total_hours_max": 6000,
+      "required_keywords": ["Snowflake", "migración", "dbt"],
+      "schema_valid": true
+    }
+  },
+  {
+    "id": "gc-15",
+    "description": "Pipeline de sincronización de catálogo de productos — starter",
+    "input": {
+      "transcript": "Necesitamos un proceso batch que cada noche sincronice el catálogo de productos de nuestro ERP con la tienda Shopify y el marketplace de Amazon. Si el stock baja de 5 unidades, debe crear una alerta en Slack. El catálogo tiene 3.000 referencias.",
+      "project_type": "data_pipeline",
+      "detail_level": "medium",
+      "output_format": "phases_table"
+    },
+    "expected": {
+      "total_cost_usd_min": 5000,
+      "total_cost_usd_max": 22000,
+      "total_hours_min": 50,
+      "total_hours_max": 220,
+      "required_keywords": ["Shopify", "sincronización", "batch"],
+      "schema_valid": true
+    }
+  },
+  {
+    "id": "gc-16",
+    "description": "Pipeline de analítica de comportamiento de usuarios — standard",
+    "input": {
+      "transcript": "Queremos construir un pipeline de analítica de comportamiento para nuestra app web. Captura eventos de clic y navegación con Segment, los transforma con Spark en un lago de datos en S3 y los expone en un data mart en Redshift para que el equipo de producto haga consultas. Volumen estimado: 10 millones de eventos al día. Equipo de 3 ingenieros de datos.",
+      "project_type": "data_pipeline",
+      "detail_level": "detailed",
+      "output_format": "phases_table"
+    },
+    "expected": {
+      "total_cost_usd_min": 30000,
+      "total_cost_usd_max": 110000,
+      "total_hours_min": 300,
+      "total_hours_max": 1100,
+      "required_keywords": ["Spark", "Redshift", "pipeline"],
+      "schema_valid": true
+    }
+  }
+]
