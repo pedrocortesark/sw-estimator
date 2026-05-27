@@ -1040,6 +1040,82 @@ def _analysis_paragraphs(
             else 0.0
         )
 
+        # Per-scenario recall at N=1 and N=max for concrete assertions
+        scenarios_in_data = sorted(
+            {r["scenario"] for r in scenario_rows if r.get("scenario") != ""}
+        )
+        n_max = max(n_vals) if n_vals else None
+
+        recall_lines: list[str] = []
+        worst_scenario: str | None = None
+        worst_recall: float | None = None
+        for sc in scenarios_in_data:
+            sc_rows_n1 = [
+                r for r in scenario_rows
+                if r.get("scenario") == sc
+                and r.get("n_turns") != ""
+                and int(r["n_turns"]) == 1
+                and r.get("turn_index") != ""
+                and int(r["turn_index"]) == 1
+            ]
+            sc_rows_nmax = (
+                [
+                    r for r in scenario_rows
+                    if r.get("scenario") == sc
+                    and r.get("n_turns") != ""
+                    and int(r["n_turns"]) == n_max
+                    and r.get("turn_index") != ""
+                    and int(r["turn_index"]) == n_max
+                ]
+                if n_max
+                else []
+            )
+            r1 = _mean(_to_floats(sc_rows_n1, "fact_recall"))
+            rn = _mean(_to_floats(sc_rows_nmax, "fact_recall"))
+            if r1 is not None and rn is not None:
+                direction = "improved" if rn > r1 else "declined"
+                recall_lines.append(
+                    f"{sc}: {r1 * 100:.0f} % at N=1 → {rn * 100:.0f} % at N={n_max} ({direction})"
+                )
+                if worst_recall is None or rn < worst_recall:
+                    worst_recall = rn
+                    worst_scenario = sc
+
+        # Cost multiplier for scenario turns (turn 20 vs turn 1)
+        cost_turn1_rows = [
+            r for r in scenario_rows
+            if r.get("turn_index") != "" and int(r["turn_index"]) == 1
+        ]
+        cost_turn_max_rows = (
+            [
+                r for r in scenario_rows
+                if r.get("n_turns") != ""
+                and int(r["n_turns"]) == n_max
+                and r.get("turn_index") != ""
+                and int(r["turn_index"]) == n_max
+            ]
+            if n_max
+            else []
+        )
+        cost_t1 = _mean(_to_floats(cost_turn1_rows, "cost_usd"))
+        cost_tn = _mean(_to_floats(cost_turn_max_rows, "cost_usd"))
+        cost_mult = (
+            round(cost_tn / cost_t1, 1)
+            if cost_t1 and cost_t1 > 0
+            else None
+        )
+        cost_mult_sentence = (
+            f"At N = {n_max}, the mean turn cost is {cost_mult}× the cost of a first turn, "
+            f"reflecting the larger context window sent to the LLM as history accumulates. "
+            if cost_mult
+            else ""
+        )
+
+        recall_summary = (
+            "; ".join(recall_lines) + ". "
+            if recall_lines
+            else ""
+        )
         drift_msg = (
             f"at N = {drift_at}"
             if drift_at
@@ -1050,17 +1126,25 @@ def _analysis_paragraphs(
             if latency_breach_turn
             else f"never exceeded the {LATENCY_BUDGET_MS:,} ms budget"
         )
+        worst_msg = (
+            f" The worst performer at N = {n_max} is {worst_scenario} with {worst_recall * 100:.0f} % recall."
+            if worst_scenario and worst_recall is not None
+            else ""
+        )
 
         paras += [
             "### Context-window / Session-memory degradation",
             "",
-            f"Fact recall dropped below 80 % {drift_msg}. "
+            f"Final-turn fact recall across the three scenarios at N = 1 vs N = {n_max}: "
+            f"{recall_summary}"
+            f"Mean recall first dropped below 80 % {drift_msg}.{worst_msg} "
             f"This is the point where the sliding-window history (max_turns = 6) has "
             f"evicted early turns and the accumulated summary has become the sole carrier "
             f"of old facts. The summariser compresses lossy-ly: project names and "
             f"technology choices survive, but quantitative assertions (budget ceilings, "
             f"team sizes) are often absorbed into prose and become harder to match exactly. "
-            f"Latency first exceeded the {LATENCY_BUDGET_MS:,} ms budget {latency_msg}. "
+            + cost_mult_sentence
+            + f"Latency first exceeded the {LATENCY_BUDGET_MS:,} ms budget {latency_msg}. "
             f"The CAG few-shot examples travel in every system prompt, so the token count "
             f"grows proportionally with conversation depth regardless of the sliding window — "
             f"the context bloat is driven by the static example block, not by the growing "
@@ -1208,7 +1292,7 @@ async def main(args: argparse.Namespace) -> int:  # noqa: C901
     if http_mode:
         import httpx
 
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        async with httpx.AsyncClient(timeout=180.0) as client:
             all_rows = await _orchestrate(
                 profiles,
                 n_values,
