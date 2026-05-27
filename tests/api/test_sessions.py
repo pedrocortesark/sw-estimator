@@ -98,6 +98,42 @@ class _FakeService:
         self.last_request = request
         return _MOCK_RESPONSE
 
+    async def estimate_conversational(
+        self,
+        *,
+        session,
+        transcript,
+        enriched_transcript,
+        attachments_total_chars=0,
+        prompt_version=None,
+    ):
+        from types import SimpleNamespace
+
+        from src.services.metadata_extractor import update_from_result
+        from src.services.summarizer import update_summary
+        from src.services.tier_resolver import resolve_tier
+
+        # Record for test introspection (mirrors real method's enriched input)
+        self.last_request = SimpleNamespace(transcript=enriched_transcript)
+
+        tier, rule = resolve_tier(session.metadata, _MOCK_RESPONSE.estimation)
+        session.last_resolved_tier = tier
+        session.last_tier_rule = rule
+
+        previous_metadata = session.metadata.model_copy(deep=True)
+        session.metadata = update_from_result(
+            transcript, _MOCK_RESPONSE.estimation, session.metadata
+        )
+        session.update_anchors(previous_metadata, session.metadata)
+
+        await update_summary(session)
+
+        session.history.add_user(transcript)
+        session.history.add_assistant(_MOCK_RESPONSE.estimation.executive_summary)
+        session.touch()
+
+        return _MOCK_RESPONSE
+
 
 # ---------------------------------------------------------------------------
 # Fixtures
