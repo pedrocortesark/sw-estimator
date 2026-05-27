@@ -44,6 +44,16 @@ services:
     depends_on:
       - api
 
+  blazor:
+    build:
+      context: ./frontend/SwEstimator.Client
+      dockerfile: Dockerfile
+    ports:
+      - "8080:80"
+    restart: unless-stopped
+    depends_on:
+      - api
+
   # Redis Stack includes RediSearch, which provides the FT.CREATE / FT.SEARCH
   # commands required by the semantic cache's vector index.
   # Vanilla redis:alpine does NOT include RediSearch and will fail with

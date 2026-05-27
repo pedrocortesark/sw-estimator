@@ -42,6 +42,9 @@ COPY --from=builder /app/.venv /app/.venv
 # Copy the source code
 COPY --from=builder /app/src /app/src
 
+# Copy the Streamlit app
+COPY app/ app/
+
 # Add the .venv binaries to PATH so we can call `uvicorn` directly
 ENV PATH="/app/.venv/bin:$PATH"
 

@@ -65,6 +65,7 @@ from typing import TYPE_CHECKING
 from openai import AsyncOpenAI
 
 from src.cache.semantic import EstimationSemanticCache
+from src.core.config import get_settings
 from src.guardrails.input import check_input
 from src.guardrails.output import enforce_scope_response
 from src.prompts.loader import render_estimation_prompt
@@ -106,8 +107,17 @@ class EstimationService:
     # Public interface
     # ------------------------------------------------------------------
 
-    async def estimate(self, request: EstimationRequest) -> EstimationResponse:
+    async def estimate(
+        self,
+        request: EstimationRequest,
+        project_metadata=None,
+        prompt_version: str | None = None,
+    ) -> EstimationResponse:
         """Run the estimation pipeline and return a structured response.
+
+        Args:
+            prompt_version: Override the active template version for this call.
+                Defaults to ``settings.prompt_version`` when ``None``.
 
         Raises:
             InputGuardrailViolation: If Layer 1 rejects the input.
@@ -115,6 +125,7 @@ class EstimationService:
                 (translated to HTTP 502 by the exception handler in
                 src/core/exceptions.py).
         """
+        version = prompt_version or get_settings().prompt_version
         # --- Layer 1: input guardrails -----------------------------------
         await self._run_input_guardrails(request)
 
@@ -135,7 +146,9 @@ class EstimationService:
             )
 
         # --- Layer 3: prompt rendering -----------------------------------
-        system_prompt, user_prompt = self._render_prompts(request)
+        system_prompt, user_prompt = self._render_prompts(
+            request, project_metadata=project_metadata, version=version
+        )
 
         # --- Layer 4: LLM structured call --------------------------------
         estimation_result, meta = await self._call_llm(
@@ -146,7 +159,9 @@ class EstimationService:
         estimation_result = self._run_output_guardrails(estimation_result)
         self._store_cache(request, estimation_result)
 
-        return self._build_response(estimation_result, meta, cached=False)
+        return self._build_response(
+            estimation_result, meta, cached=False, prompt_version=version
+        )
 
     # ------------------------------------------------------------------
     # Layer implementations (one private method per layer)
@@ -171,7 +186,7 @@ class EstimationService:
         data = json.dumps(
             {
                 "transcript": request.transcript,
-                "provider": request.provider,
+                "provider": getattr(request, "provider", None),
                 "project_type": request.project_type,
                 "detail_level": request.detail_level,
                 "output_format": request.output_format,
@@ -199,15 +214,18 @@ class EstimationService:
         # Fallback: module-level in-memory dict
         return _IN_MEMORY_CACHE.get(self._cache_key(request))
 
-    def _render_prompts(self, request: EstimationRequest) -> tuple[str, str]:
-        """Layer 3 — render Jinja2 templates into (system_prompt, user_prompt).
-
-        Template resolution: ``src/prompts/estimation/v1/{system,user}.j2``
-
-        TODO: pass template variables (schema hints, few-shot examples, etc.)
-        once the Jinja2 templates are filled in.
-        """
-        return render_estimation_prompt(request)
+    def _render_prompts(
+        self,
+        request: EstimationRequest,
+        project_metadata=None,
+        version: str | None = None,
+    ) -> tuple[str, str]:
+        """Layer 3 — render Jinja2 templates into (system_prompt, user_prompt)."""
+        return render_estimation_prompt(
+            request,
+            version=version or get_settings().prompt_version,
+            project_metadata=project_metadata,
+        )
 
     async def _call_llm(
         self,
@@ -229,17 +247,18 @@ class EstimationService:
         from src.core.exceptions import UnknownProviderError
         from src.services.llm_service import generate_estimation
 
-        if request.provider is not None and request.provider not in (
+        provider = getattr(request, "provider", None)
+        if provider is not None and provider not in (
             "openai",
             "anthropic",
         ):
             raise UnknownProviderError(
-                f"Unsupported provider: '{request.provider}'. Use 'openai' or 'anthropic'."
+                f"Unsupported provider: '{provider}'. Use 'openai' or 'anthropic'."
             )
 
         result_dict = await generate_estimation(
             transcript=request.transcript,
-            provider_override=request.provider,
+            provider_override=provider,
         )
         meta = {
             "provider": result_dict["provider"],
@@ -275,7 +294,7 @@ class EstimationService:
         meta: dict,
         *,
         cached: bool = False,
-        prompt_version: str = "v1",
+        prompt_version: str | None = None,
     ) -> EstimationResponse:
         """Assemble the final ``EstimationResponse`` from the LLM result and metadata."""
         from src.schemas.estimation import UsageCost
@@ -295,5 +314,5 @@ class EstimationService:
                 cost_usd=cost_usd,
             ),
             cached=cached,
-            prompt_version=prompt_version,
+            prompt_version=prompt_version or get_settings().prompt_version,
         )

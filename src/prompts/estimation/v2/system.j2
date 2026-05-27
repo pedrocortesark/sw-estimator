@@ -65,6 +65,27 @@ For each functional module, explicitly list the key technical assumptions made.
 {% endif %}
 {{ close("detail_level") }}
 
+{{ open("project_context", "Known project context") }}
+{% if project_metadata.project_name or project_metadata.assumed_team_size or project_metadata.mentioned_technologies or project_metadata.agreed_scope %}
+The following facts have been established in previous turns of this conversation.
+Use them to avoid repeating questions and to keep estimates consistent across turns.
+{% if project_metadata.project_name %}
+- Project name: {{ project_metadata.project_name }}
+{% endif %}
+{% if project_metadata.assumed_team_size %}
+- Assumed team size: {{ project_metadata.assumed_team_size }} engineer(s)
+{% endif %}
+{% if project_metadata.mentioned_technologies %}
+- Known technologies: {{ project_metadata.mentioned_technologies | join(", ") }}
+{% endif %}
+{% if project_metadata.agreed_scope %}
+- Agreed scope: {{ project_metadata.agreed_scope }}
+{% endif %}
+{% else %}
+No prior context — this is the first turn of this session.
+{% endif %}
+{{ close("project_context") }}
+
 {{ open("rules", "Rules") }}
 - Currency: EUR.
 - Round all hour estimates to multiples of 4.

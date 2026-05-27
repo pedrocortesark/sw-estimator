@@ -24,6 +24,7 @@ from litellm import Router
 from src.core.config import get_settings
 from src.core.exceptions import ProviderAuthError, ProviderRateLimitError
 from src.core.logging import logger
+from src.services.pricing import calculate_cost
 
 # Silence verbose LiteLLM logs in production
 litellm.suppress_debug_info = True
@@ -164,19 +165,24 @@ class LLMWrapper:
         input_tokens = getattr(usage, "prompt_tokens", 0) or 0
         output_tokens = getattr(usage, "completion_tokens", 0) or 0
 
+        resolved_model = getattr(completion, "model", model)
+        cost_usd = calculate_cost(resolved_model, input_tokens, output_tokens)
+
         call_logger.info(
             "structured_call_completed",
             latency_ms=latency_ms,
             tokens_in=input_tokens,
             tokens_out=output_tokens,
+            cost_usd=cost_usd,
         )
 
         return result, {
-            "model": getattr(completion, "model", model),
+            "model": resolved_model,
             "provider": provider,
             "latency_ms": latency_ms,
             "input_tokens": input_tokens,
             "output_tokens": output_tokens,
+            "cost_usd": cost_usd,
         }
 
 

@@ -61,12 +61,12 @@ MOCK_RESPONSE = EstimationResponse(
 
 
 class _MockService:
-    async def estimate(self, request):
+    async def estimate(self, request, project_metadata=None, prompt_version=None):
         return MOCK_RESPONSE
 
 
 class _FailingService:
-    async def estimate(self, request):
+    async def estimate(self, request, project_metadata=None, prompt_version=None):
         raise RuntimeError("LLM network timeout")
 
 
