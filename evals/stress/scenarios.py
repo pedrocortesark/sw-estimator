@@ -173,8 +173,7 @@ def _has_tech(tech: str) -> Callable["[Session]", bool]:
 
     def _check(session: "Session") -> bool:
         return any(
-            t.lower() == tech.lower()
-            for t in session.metadata.mentioned_technologies
+            t.lower() == tech.lower() for t in session.metadata.mentioned_technologies
         )
 
     _check.__name__ = f"has_tech_{tech}"
@@ -800,16 +799,12 @@ PIVOTING_PROJECT = ScenarioProfile(
             facts=[
                 FactAssertion(
                     introduced_at_turn=10,
-                    description=(
-                        "Flutter still in mentioned_technologies at turn 10"
-                    ),
+                    description=("Flutter still in mentioned_technologies at turn 10"),
                     check=_has_tech("Flutter"),
                 ),
                 FactAssertion(
                     introduced_at_turn=10,
-                    description=(
-                        "FastAPI still in mentioned_technologies at turn 10"
-                    ),
+                    description=("FastAPI still in mentioned_technologies at turn 10"),
                     check=_has_tech("FastAPI"),
                 ),
             ],
@@ -944,9 +939,7 @@ PIVOTING_PROJECT = ScenarioProfile(
                 ),
                 FactAssertion(
                     introduced_at_turn=20,
-                    description=(
-                        "FastAPI still in mentioned_technologies at turn 20"
-                    ),
+                    description=("FastAPI still in mentioned_technologies at turn 20"),
                     check=_has_tech("FastAPI"),
                 ),
                 FactAssertion(
@@ -1055,9 +1048,7 @@ CONTRADICTING_PROJECT = ScenarioProfile(
                 ),
                 FactAssertion(
                     introduced_at_turn=3,
-                    description=(
-                        "tier is starter or standard after 30k-budget turn"
-                    ),
+                    description=("tier is starter or standard after 30k-budget turn"),
                     check=_tier_is_one_of("starter", "standard"),
                 ),
             ],
@@ -1122,8 +1113,7 @@ CONTRADICTING_PROJECT = ScenarioProfile(
                 FactAssertion(
                     introduced_at_turn=8,
                     description=(
-                        "80k budget appears in scope after turn 8 "
-                        "(revised constraint)"
+                        "80k budget appears in scope after turn 8 (revised constraint)"
                     ),
                     check=_scope_contains("80"),
                 ),
@@ -1182,9 +1172,7 @@ CONTRADICTING_PROJECT = ScenarioProfile(
                 ),
                 FactAssertion(
                     introduced_at_turn=10,
-                    description=(
-                        "tier is standard or enterprise at turn 10"
-                    ),
+                    description=("tier is standard or enterprise at turn 10"),
                     check=_tier_is_one_of("standard", "enterprise"),
                 ),
                 FactAssertion(
@@ -1333,9 +1321,7 @@ CONTRADICTING_PROJECT = ScenarioProfile(
                 ),
                 FactAssertion(
                     introduced_at_turn=20,
-                    description=(
-                        "tier is standard or enterprise at turn 20"
-                    ),
+                    description=("tier is standard or enterprise at turn 20"),
                     check=_tier_is_one_of("standard", "enterprise"),
                 ),
                 FactAssertion(
