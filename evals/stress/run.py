@@ -610,7 +610,7 @@ async def _run_attachment_http(
 
     try:
         if size_kb > 0:
-            files = [("attachments", ("spec.pdf", pdf_bytes, "application/pdf"))]
+            files = [("attachments", ("spec.pdf", bytes(pdf_bytes), "application/pdf"))]
             est_resp = await client.post(
                 f"{base_url}/api/v1/sessions/{session_id}/estimate",
                 data={"transcript": BASE_TRANSCRIPT},
@@ -1048,7 +1048,7 @@ def _analysis_paragraphs(
         latency_msg = (
             f"at turn {latency_breach_turn}"
             if latency_breach_turn
-            else "never exceeded the {LATENCY_BUDGET_MS} ms budget"
+            else f"never exceeded the {LATENCY_BUDGET_MS:,} ms budget"
         )
 
         paras += [
@@ -1114,20 +1114,27 @@ def _analysis_paragraphs(
             round(cost_100 / cost_0, 1) if cost_0 > 0 and cost_0 == cost_0 else None
         )
 
-        recall_drop_msg = (
-            f"at {recall_drop_kb} KB"
-            if recall_drop_kb
-            else "not observed in the tested range"
+        cost_ratio_msg = f"{cost_ratio}× the baseline cost" if cost_ratio else None
+        cost_sentence = (
+            f"The 100 KB run costs {cost_ratio_msg}, confirming that "
+            f"attachment-heavy workflows carry a non-trivial price premium. "
+            if cost_ratio_msg
+            else "Cost data for the 100 KB run could not be computed (baseline cost was zero, "
+            "likely due to a cache hit on the baseline turn). "
         )
-        cost_ratio_msg = (
-            f"{cost_ratio}× the baseline cost" if cost_ratio else "cost data incomplete"
-        )
+
+        if recall_drop_kb:
+            recall_sentence = (
+                f"Attachment recall fell below 70 % at {recall_drop_kb} KB. "
+            )
+        else:
+            recall_sentence = "Attachment recall did not drop below 70 % within the tested size range. "
 
         paras += [
             "### Attachment-size degradation (CAG retrieval boundary)",
             "",
-            f"Attachment recall fell below 70 % {recall_drop_msg}. "
-            f"The root cause is the MAX_ATTACHMENT_CHARS = 60 000 truncation cap: "
+            recall_sentence
+            + f"The root cause is the MAX_ATTACHMENT_CHARS = 60 000 truncation cap: "
             f"once extracted PDF text exceeds the cap the tail of the document is silently "
             f"discarded before it reaches the prompt. For the 100 KB test point this cut off "
             f"4 of 10 recall markers, creating a theoretical ceiling of 60 % recall "
@@ -1135,12 +1142,12 @@ def _analysis_paragraphs(
             f"the LLM's own attention distribution: when the attachment is long the model "
             f"anchors on the first few paragraphs (the 'lost-in-the-middle' effect documented "
             f"in Liu et al. 2023) and tends to paraphrase rather than name-check individual "
-            f"modules. The 100 KB run costs roughly {cost_ratio_msg}, confirming that "
-            f"attachment-heavy workflows carry a non-trivial price premium. "
-            f"Mitigation options: (1) raise or remove the cap and rely on model context limits; "
-            f"(2) implement a retrieve-and-rank step that selects only the top-K chunks most "
-            f"relevant to the estimation task (hybrid CAG + RAG); "
-            f"(3) summarise large attachments server-side before embedding them in the prompt.",
+            f"modules. "
+            + cost_sentence
+            + "Mitigation options: (1) raise or remove the cap and rely on model context limits; "
+            "(2) implement a retrieve-and-rank step that selects only the top-K chunks most "
+            "relevant to the estimation task (hybrid CAG + RAG); "
+            "(3) summarise large attachments server-side before embedding them in the prompt.",
             "",
         ]
     else:
@@ -1312,11 +1319,9 @@ async def _orchestrate(
                 lat = row.get("latency_ms")
                 cost = row.get("cost_usd")
                 recall = row.get("attachment_recall")
-                print(
-                    f"latency={_nan_str(float(lat) if lat != '' else float('nan')):.1f} ms  "
-                    f"cost=${float(cost):.4f}  "  # type: ignore[arg-type]
-                    f"recall={recall}"
-                )
+                lat_str = f"{float(lat):.1f}" if lat not in (None, "") else "—"
+                cost_str = f"${float(cost):.4f}" if cost not in (None, "") else "—"
+                print(f"latency={lat_str} ms  cost={cost_str}  recall={recall}")
             except Exception as exc:  # noqa: BLE001
                 print(f"ERROR: {exc}")
                 logger.exception("attachment_run_failed", kb=kb, rep=rep)
