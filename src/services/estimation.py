@@ -60,8 +60,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import time
 from typing import TYPE_CHECKING
 
+import structlog
 from openai import AsyncOpenAI
 
 from src.cache.semantic import EstimationSemanticCache
@@ -130,7 +132,7 @@ class EstimationService:
         await self._run_input_guardrails(request)
 
         # --- Layer 2: semantic cache (read) ------------------------------
-        cached_result = self._lookup_cache(request)
+        cached_result, _cache_kind = self._lookup_cache(request)
         if cached_result is not None:
             return self._build_response(
                 cached_result,
@@ -195,24 +197,32 @@ class EstimationService:
         )
         return hashlib.sha256(data.encode()).hexdigest()
 
-    def _lookup_cache(self, request: EstimationRequest) -> "EstimationResult | None":
+    def _lookup_cache(
+        self, request: EstimationRequest
+    ) -> "tuple[EstimationResult | None, str]":
         """Layer 2 (read) — return a cached result for semantically similar input.
 
         Checks, in order:
         1. Redis semantic cache (when configured)
         2. In-process memory dict (always checked; fallback for local dev)
 
-        Returns ``None`` on a cache miss.
+        Returns ``(None, "none")`` on a cache miss, otherwise
+        ``(result, kind)`` where *kind* is ``"semantic"`` for a vector-
+        similarity hit or ``"exact"`` for a hash-based in-memory hit.
         """
         from src.schemas.estimation import EstimationResult
 
         if self._cache is not None:
             result = self._cache.lookup(request)
             if isinstance(result, EstimationResult):
-                return result
+                return result, "semantic"
 
-        # Fallback: module-level in-memory dict
-        return _IN_MEMORY_CACHE.get(self._cache_key(request))
+        # Fallback: module-level in-memory dict (exact hash match)
+        exact = _IN_MEMORY_CACHE.get(self._cache_key(request))
+        if exact is not None:
+            return exact, "exact"
+
+        return None, "none"
 
     def _render_prompts(
         self,
@@ -287,6 +297,133 @@ class EstimationService:
         # Also write to Redis semantic cache when configured.
         if self._cache is not None:
             self._cache.store(request, estimation_result)
+
+    async def estimate_conversational(
+        self,
+        *,
+        session: "Session",
+        transcript: str,
+        enriched_transcript: str,
+        attachments_total_chars: int = 0,
+        prompt_version: str | None = None,
+    ) -> EstimationResponse:
+        """Run the estimation pipeline for one conversational turn and emit ``turn_observed``.
+
+        Combines the full 5-layer estimation pipeline with session-state
+        management (tier resolution, metadata extraction, anchor tracking,
+        sliding-window summarisation, history update) and emits a single
+        structured ``turn_observed`` event that aggregates every observable
+        field for that turn — making it straightforward to export per-turn
+        CSVs or feed them into an eval harness.
+
+        The ``turn_observed`` event is emitted **just before the return** so
+        all fields, including post-compression ``messages_in_window``, are
+        fully settled.
+
+        Args:
+            session: The active :class:`~src.services.sessions.Session`
+                instance.  State (metadata, anchors, history, summary) is
+                updated in-place as a side-effect.
+            transcript: The raw user message, used for history storage and
+                metadata extraction.  Does **not** include attachment text.
+            enriched_transcript: ``transcript`` with any extracted attachment
+                text appended.  This is the string sent to the LLM.
+            attachments_total_chars: Character count of the attachment portion
+                of *enriched_transcript*.  Pass ``0`` when no files were
+                attached.
+            prompt_version: Prompt template override forwarded to Layer 3.
+        """
+        from src.services.metadata_extractor import update_from_result
+        from src.services.sessions import Session  # local to avoid circular
+        from src.services.summarizer import update_summary
+        from src.services.tier_resolver import resolve_tier
+
+        _log = structlog.get_logger().bind(session_id=session.session_id)
+
+        t0 = time.perf_counter()
+        turn_index = session.history._turn_count() + 1
+        version = prompt_version or get_settings().prompt_version
+
+        request = EstimationRequest(transcript=enriched_transcript)
+
+        # --- Layer 1: input guardrails -----------------------------------
+        await self._run_input_guardrails(request)
+
+        # --- Layer 2: semantic cache (read) — capture kind ---------------
+        cached_result, cache_hit_kind = self._lookup_cache(request)
+        if cached_result is not None:
+            response = self._build_response(
+                cached_result,
+                {
+                    "provider": "memory_cache"
+                    if self._cache is None
+                    else "semantic_cache",
+                    "model": "cached",
+                    "input_tokens": 0,
+                    "output_tokens": 0,
+                },
+                cached=True,
+            )
+        else:
+            # --- Layer 3: prompt rendering -------------------------------
+            system_prompt, user_prompt = self._render_prompts(
+                request,
+                project_metadata=session.metadata,
+                version=version,
+            )
+
+            # --- Layer 4: LLM structured call ----------------------------
+            estimation_result, meta = await self._call_llm(
+                system_prompt, user_prompt, request
+            )
+
+            # --- Layer 5: output guardrails + cache write ----------------
+            estimation_result = self._run_output_guardrails(estimation_result)
+            self._store_cache(request, estimation_result)
+
+            response = self._build_response(
+                estimation_result, meta, cached=False, prompt_version=version
+            )
+
+        # --- Session state updates ---------------------------------------
+        tier, rule = resolve_tier(session.metadata, response.estimation)
+        session.last_resolved_tier = tier
+        session.last_tier_rule = rule
+
+        previous_metadata = session.metadata.model_copy(deep=True)
+        session.metadata = update_from_result(
+            transcript, response.estimation, session.metadata
+        )
+        session.update_anchors(previous_metadata, session.metadata)
+
+        # Summarise before adding the new turn so the window check reflects
+        # the current (pre-turn) message count.
+        await update_summary(session)
+
+        session.history.add_user(transcript)
+        session.history.add_assistant(response.estimation.executive_summary)
+        session.touch()
+
+        latency_ms = round((time.perf_counter() - t0) * 1000, 1)
+
+        # --- Emit unified turn event (all fields in one place) -----------
+        _log.info(
+            "turn_observed",
+            turn_index=turn_index,
+            enriched_transcript_chars=len(enriched_transcript),
+            attachments_total_chars=attachments_total_chars,
+            messages_in_window=len(session.history),
+            anchors_count=len(session.anchors),
+            summary_chars=session.summary_chars,
+            tokens_in=response.usage.input_tokens,
+            tokens_out=response.usage.output_tokens,
+            cost_usd=response.usage.cost_usd,
+            latency_ms=latency_ms,
+            cache_hit_kind=cache_hit_kind,
+            last_resolved_tier=session.last_resolved_tier,
+        )
+
+        return response
 
     def _build_response(
         self,

@@ -7,17 +7,14 @@ from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile, status
 from pydantic import BaseModel
 
 from src.dependencies import get_estimation_service
-from src.schemas.estimation import EstimationRequest, EstimationResponse
+from src.schemas.estimation import EstimationResponse
 from src.services.document_extractor import (
     UnsupportedFileTypeError,
     build_attachment_block,
     extract_text,
 )
 from src.services.estimation import EstimationService
-from src.services.metadata_extractor import update_from_result
 from src.services.sessions import session_store
-from src.services.summarizer import update_summary
-from src.services.tier_resolver import resolve_tier
 
 router = APIRouter(prefix="/api/v1", tags=["Sessions"])
 
@@ -34,7 +31,9 @@ class SessionInfoResponse(BaseModel):
     session_id: str
     turn_count: int
     anchors_count: int
+    anchors: list[str]
     summary_chars: int
+    accumulated_summary: str
     last_resolved_tier: str
     last_tier_rule: str
     project_metadata: dict
@@ -56,7 +55,9 @@ async def get_session(session_id: str) -> SessionInfoResponse:
         session_id=session_id,
         turn_count=session.history._turn_count(),
         anchors_count=len(session.anchors),
+        anchors=list(session.anchors),
         summary_chars=session.summary_chars,
+        accumulated_summary=session.accumulated_summary or "",
         last_resolved_tier=session.last_resolved_tier,
         last_tier_rule=session.last_tier_rule,
         project_metadata=session.metadata.model_dump(),
@@ -117,9 +118,9 @@ async def session_estimate(
     1. Validate that the session exists (404 otherwise).
     2. For each uploaded file, read bytes and extract text locally.
     3. Append each extracted block to the transcript with a clear separator.
-    4. Build an ``EstimationRequest`` from the combined text and delegate to
-       the existing ``EstimationService.estimate()`` pipeline unchanged.
-    5. Record the turn in the session history for future context.
+    4. Delegate to ``EstimationService.estimate_conversational()`` which runs
+       the full pipeline, updates session state, and emits a ``turn_observed``
+       event with all turn-level observability fields in one place.
     """
     session = session_store.get(session_id)
     if session is None:
@@ -128,7 +129,8 @@ async def session_estimate(
             detail=f"Session '{session_id}' not found. Call POST /api/v1/sessions first.",
         )
 
-    combined = transcript
+    enriched = transcript
+    attachments_total_chars = 0
 
     for upload in attachments or []:
         raw = await upload.read()
@@ -147,35 +149,13 @@ async def session_estimate(
                 detail=str(exc),
             ) from exc
 
-        combined += "\n\n" + build_attachment_block(
-            upload.filename or "attachment", text
-        )
+        block = build_attachment_block(upload.filename or "attachment", text)
+        enriched += "\n\n" + block
+        attachments_total_chars += len(block) + 2  # +2 for the "\n\n" separator
 
-    request = EstimationRequest(transcript=combined)
-    result = await service.estimate(request, project_metadata=session.metadata)
-
-    # Resolve the project tier from the latest result + current metadata.
-    tier, rule = resolve_tier(session.metadata, result.estimation)
-    session.last_resolved_tier = tier
-    session.last_tier_rule = rule
-
-    # Snapshot metadata BEFORE updating so update_anchors can compare.
-    previous_metadata = session.metadata.model_copy(deep=True)
-
-    # Update accumulated project facts from this turn's response.
-    session.metadata = update_from_result(
-        transcript, result.estimation, session.metadata
+    return await service.estimate_conversational(
+        session=session,
+        transcript=transcript,
+        enriched_transcript=enriched,
+        attachments_total_chars=attachments_total_chars,
     )
-
-    # Detect and record stable facts between the two metadata snapshots.
-    session.update_anchors(previous_metadata, session.metadata)
-
-    # Compress the current window into a summary before it gets evicted.
-    await update_summary(session)
-
-    # Persist the turn so future requests in this session have context.
-    session.history.add_user(transcript)
-    session.history.add_assistant(result.estimation.executive_summary)
-    session.touch()
-
-    return result

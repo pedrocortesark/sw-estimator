@@ -12,13 +12,44 @@ Three independent, stateless metrics are provided:
 - ContentRecallMetric    — checks that all required keywords appear
   somewhere in the executive_summary or in any phase name (case-
   insensitive substring match).
+
+Shared contract
+---------------
+:class:`MetricResult` is the canonical return type for any metric that
+returns richer information than a plain bool.  It is defined here so that
+both this module and parallel evaluation modules (e.g. ``evals/stress/``)
+can import from a single location.
 """
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from pydantic import ValidationError
 
 from src.schemas.estimation import EstimationResponse
+
+
+# ---------------------------------------------------------------------------
+# Shared result type
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class MetricResult:
+    """Return value for structured evaluation metrics.
+
+    Attributes:
+        name:    Identifier for the metric (e.g. ``"latency_budget"``).
+        score:   Numeric score in *[0.0, 1.0]*.  Binary metrics use 1.0/0.0.
+        passed:  Convenience bool derived from ``score`` at evaluation time.
+        details: Human-readable explanation of the outcome (never empty).
+    """
+
+    name: str
+    score: float
+    passed: bool
+    details: str
 
 
 class SchemaAdherenceMetric:
@@ -69,7 +100,9 @@ class CostBoundsMetric:
         """
         try:
             cost = response["estimation"]["total_cost_usd"]
-            return expected["total_cost_usd_min"] <= cost <= expected["total_cost_usd_max"]
+            return (
+                expected["total_cost_usd_min"] <= cost <= expected["total_cost_usd_max"]
+            )
         except (KeyError, TypeError):
             return False
 

@@ -35,6 +35,11 @@ class UnsupportedFileTypeError(EstimatorError):
 ATTACHMENT_HEADER = "--- attachment: {filename} ---"
 ATTACHMENT_FOOTER = "--- end of {filename} ---"
 
+# Maximum characters of extracted attachment text injected into the prompt.
+# Prevents context overflow for large documents while keeping ≥ 60 kchars of
+# content — well within gpt-4o-mini's 128 k-token context window.
+MAX_ATTACHMENT_CHARS = 60_000
+
 
 def extract_text(filename: str, content: bytes) -> str:
     """Extract plain text from a PDF or Word document.
@@ -66,12 +71,16 @@ def extract_text(filename: str, content: bytes) -> str:
 def build_attachment_block(filename: str, text: str) -> str:
     """Wrap extracted text in clearly delimited block for the LLM prompt.
 
+    Text longer than MAX_ATTACHMENT_CHARS is silently truncated so that the
+    combined transcript never exceeds the EstimationRequest max_length limit.
+
     The header/footer markers let the model understand that the content
     comes from a specific attached document, not from the user transcript.
     """
+    truncated = text[:MAX_ATTACHMENT_CHARS]
     header = ATTACHMENT_HEADER.format(filename=filename)
     footer = ATTACHMENT_FOOTER.format(filename=filename)
-    return f"{header}\n{text.strip()}\n{footer}"
+    return f"{header}\n{truncated.strip()}\n{footer}"
 
 
 # ---------------------------------------------------------------------------

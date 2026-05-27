@@ -56,7 +56,17 @@ def calculate_cost(model: str, input_tokens: int, output_tokens: int) -> float:
     """
     from src.core.logging import logger  # local import to avoid circular deps
 
-    pricing = MODEL_PRICING.get(model)
+    # Normalise LiteLLM-style "provider/model" names (e.g. "openai/gpt-4o-mini")
+    # and versioned model names returned by the API (e.g. "gpt-4o-mini-2024-07-18")
+    normalised = model.split("/")[-1] if "/" in model else model
+    pricing = MODEL_PRICING.get(model) or MODEL_PRICING.get(normalised)
+    if pricing is None:
+        # Try prefix match: "gpt-4o-mini-2024-07-18" → "gpt-4o-mini"
+        # Sort keys longest-first to avoid "gpt-4o" matching before "gpt-4o-mini"
+        for key in sorted(MODEL_PRICING, key=len, reverse=True):
+            if normalised.startswith(key):
+                pricing = MODEL_PRICING[key]
+                break
     if pricing is None:
         logger.warning(
             f"No pricing entry found for model '{model}'. Cost will be reported as 0.0."

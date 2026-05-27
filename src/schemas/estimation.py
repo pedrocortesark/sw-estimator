@@ -50,7 +50,7 @@ class EstimationRequest(BaseModel):
     transcript: str = Field(
         ...,
         min_length=20,
-        max_length=2000,
+        max_length=70_000,  # must accommodate transcript + extracted attachment text (≤ 60 000 chars)
         description="Description of the software project to estimate.",
         examples=[
             "The client wants a web app where users can upload CSV files and visualise the data as interactive charts. The backend should store the files in S3 and expose a REST API."
