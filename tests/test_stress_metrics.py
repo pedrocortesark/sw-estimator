@@ -168,7 +168,9 @@ class TestCostBudgetMetric:
 
 class TestMemoryDriftMetric:
     def test_passes_when_fact_in_summary(self) -> None:
-        session = _make_session(summary="The project is called Nimbus and uses Flutter.")
+        session = _make_session(
+            summary="The project is called Nimbus and uses Flutter."
+        )
         metric = MemoryDriftMetric(fact="Nimbus")
         result = metric.evaluate(session)
 

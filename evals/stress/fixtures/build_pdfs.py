@@ -65,9 +65,9 @@ from evals.stress.attachment_stress import generate_pdf
 # Key   = size in KB  (same unit as ATTACHMENT_SIZES_KB in attachment_stress.py)
 # Value = output filename (relative to this script's directory)
 PDF_TARGETS: dict[int, str] = {
-    5:   "attach_5kb.pdf",
-    20:  "attach_20kb.pdf",
-    50:  "attach_50kb.pdf",
+    5: "attach_5kb.pdf",
+    20: "attach_20kb.pdf",
+    50: "attach_50kb.pdf",
     100: "attach_100kb.pdf",
 }
 
@@ -125,7 +125,9 @@ def build_all(sizes: list[int], *, dry_run: bool) -> None:
     for kb in sorted(sizes):
         filename = PDF_TARGETS.get(kb)
         if filename is None:
-            print(f"  [skip] {kb} KB — not in PDF_TARGETS; add an entry to build_pdfs.py")
+            print(
+                f"  [skip] {kb} KB — not in PDF_TARGETS; add an entry to build_pdfs.py"
+            )
             continue
         dest = fixtures_dir / filename
         build_one(kb, dest, dry_run=dry_run)
