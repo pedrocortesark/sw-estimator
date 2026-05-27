@@ -103,16 +103,16 @@ BASE_TRANSCRIPT: str = (
 # Placed at decile boundaries (5 %, 15 %, …, 95 %) of the text body so that
 # the 100 KB document has its last four markers beyond the 60 000-char cap.
 RECALL_MARKERS: list[tuple[str, str]] = [
-    ("ZephyrAuth",    "authentication and authorisation subsystem"),
-    ("NebulaPay",     "payment processing engine with Stripe integration"),
-    ("AuroraCache",   "distributed caching layer backed by Redis"),
-    ("StellarAPI",    "public RESTful API gateway with rate limiting"),
-    ("CosmosSearch",  "full-text search integration via Elasticsearch"),
-    ("OrionMetrics",  "analytics and KPI reporting dashboard"),
-    ("PulsarNotify",  "real-time notification engine (email + push)"),
-    ("VegaExport",    "data export module - CSV, Excel, and PDF reports"),
-    ("SiriusAdmin",   "administrative back-office and user management panel"),
-    ("LyraCI",        "CI/CD pipeline and deployment automation"),
+    ("ZephyrAuth", "authentication and authorisation subsystem"),
+    ("NebulaPay", "payment processing engine with Stripe integration"),
+    ("AuroraCache", "distributed caching layer backed by Redis"),
+    ("StellarAPI", "public RESTful API gateway with rate limiting"),
+    ("CosmosSearch", "full-text search integration via Elasticsearch"),
+    ("OrionMetrics", "analytics and KPI reporting dashboard"),
+    ("PulsarNotify", "real-time notification engine (email + push)"),
+    ("VegaExport", "data export module - CSV, Excel, and PDF reports"),
+    ("SiriusAdmin", "administrative back-office and user management panel"),
+    ("LyraCI", "CI/CD pipeline and deployment automation"),
 ]
 
 # Plausible filler text used as padding between marker sections.
@@ -155,8 +155,7 @@ def _build_spec_text(target_chars: int) -> tuple[str, list[str]]:
     # Compute the char index where each marker should appear.
     # Deciles: 5 %, 15 %, 25 %, …, 95 % of target_chars.
     marker_positions: list[int] = [
-        int(target_chars * (2 * i + 1) / (2 * n_markers))
-        for i in range(n_markers)
+        int(target_chars * (2 * i + 1) / (2 * n_markers)) for i in range(n_markers)
     ]
 
     # Build the document section by section.
@@ -338,7 +337,9 @@ async def _run_point(
         truncated_chars = len(truncated_text)
 
         # Determine which markers survived truncation.
-        markers_in_input = [m for m in all_markers if m.lower() in truncated_text.lower()]
+        markers_in_input = [
+            m for m in all_markers if m.lower() in truncated_text.lower()
+        ]
         markers_truncated = len(all_markers) - len(markers_in_input)
 
         attachment_block = build_attachment_block("spec.pdf", truncated_text)
@@ -437,16 +438,16 @@ async def _run_point(
 # ---------------------------------------------------------------------------
 
 _TABLE_COLS = [
-    ("size_kb",          7,  "Size KB"),
-    ("extracted_chars",  14, "Extracted ch"),
-    ("truncated_chars",  14, "Truncated ch"),
+    ("size_kb", 7, "Size KB"),
+    ("extracted_chars", 14, "Extracted ch"),
+    ("truncated_chars", 14, "Truncated ch"),
     ("markers_in_input", 10, "Markers in"),
-    ("markers_truncated",11, "Trunc'd out"),
-    ("latency_ms",       10, "Latency ms"),
-    ("tokens_in",         9, "Tok in"),
-    ("tokens_out",        9, "Tok out"),
-    ("cost_usd",         10, "Cost USD"),
-    ("recall",            8, "Recall"),
+    ("markers_truncated", 11, "Trunc'd out"),
+    ("latency_ms", 10, "Latency ms"),
+    ("tokens_in", 9, "Tok in"),
+    ("tokens_out", 9, "Tok out"),
+    ("cost_usd", 10, "Cost USD"),
+    ("recall", 8, "Recall"),
 ]
 
 
@@ -474,10 +475,21 @@ def _print_table(results: list[dict]) -> None:
 def _save_csv(results: list[dict], path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fieldnames = [
-        "size_kb", "pdf_bytes", "extracted_chars", "truncated_chars",
-        "markers_in_input", "markers_truncated", "enriched_chars",
-        "latency_ms", "tokens_in", "tokens_out", "cost_usd", "recall",
-        "found_markers", "missing_markers", "error",
+        "size_kb",
+        "pdf_bytes",
+        "extracted_chars",
+        "truncated_chars",
+        "markers_in_input",
+        "markers_truncated",
+        "enriched_chars",
+        "latency_ms",
+        "tokens_in",
+        "tokens_out",
+        "cost_usd",
+        "recall",
+        "found_markers",
+        "missing_markers",
+        "error",
     ]
     with open(path, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
@@ -517,10 +529,14 @@ async def main(dry_run: bool = False, output: str | None = None) -> list[dict]:
                 f"markers_cut={result['markers_truncated']}"
             )
         else:
-            status = f"ERROR: {result['error']}" if result["error"] else (
-                f"latency={result['latency_ms']:>7.0f} ms  "
-                f"cost=${result['cost_usd']:.6f}  "
-                f"recall={result['recall']:.0%}"
+            status = (
+                f"ERROR: {result['error']}"
+                if result["error"]
+                else (
+                    f"latency={result['latency_ms']:>7.0f} ms  "
+                    f"cost=${result['cost_usd']:.6f}  "
+                    f"recall={result['recall']:.0%}"
+                )
             )
             print(status)
 
