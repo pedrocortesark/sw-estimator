@@ -31,7 +31,9 @@ class SessionInfoResponse(BaseModel):
     session_id: str
     turn_count: int
     anchors_count: int
+    anchors: list[str]
     summary_chars: int
+    accumulated_summary: str
     last_resolved_tier: str
     last_tier_rule: str
     project_metadata: dict
@@ -53,7 +55,9 @@ async def get_session(session_id: str) -> SessionInfoResponse:
         session_id=session_id,
         turn_count=session.history._turn_count(),
         anchors_count=len(session.anchors),
+        anchors=list(session.anchors),
         summary_chars=session.summary_chars,
+        accumulated_summary=session.accumulated_summary or "",
         last_resolved_tier=session.last_resolved_tier,
         last_tier_rule=session.last_tier_rule,
         project_metadata=session.metadata.model_dump(),

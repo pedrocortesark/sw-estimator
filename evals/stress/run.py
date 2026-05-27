@@ -180,11 +180,9 @@ def _eval_facts(
 def _session_from_info(info: dict) -> SimpleNamespace:
     """Build a duck-typed Session proxy from a /sessions/{id} GET response dict.
 
-    In HTTP mode the full Session object is not available locally.  This
-    proxy exposes the same attribute surface as Session so that check
-    callables can be exercised.  Anchor strings are unavailable via the API
-    (only the count is returned), so ``_anchor_exists`` checks will always
-    fail — this is documented in the CSV ``error`` field of HTTP runs.
+    Maps every field returned by the API onto the same attribute surface as a
+    live Session object so that FactAssertion check callables work identically
+    in HTTP and in-process modes.
 
     Args:
         info: Parsed JSON body from GET /api/v1/sessions/{id}.
@@ -202,8 +200,8 @@ def _session_from_info(info: dict) -> SimpleNamespace:
     )
     return SimpleNamespace(
         metadata=meta,
-        anchors=[],  # not exposed by the API — anchor checks will fail
-        accumulated_summary="",  # not exposed by the API
+        anchors=info.get("anchors") or [],
+        accumulated_summary=info.get("accumulated_summary") or "",
         last_resolved_tier=info.get("last_resolved_tier", "unknown"),
         last_tier_rule=info.get("last_tier_rule", "no_match"),
     )
@@ -452,11 +450,6 @@ async def _run_scenario_http(
 ) -> list[dict]:
     """Run one scenario profile for *n_turns* turns via HTTP.
 
-    Facts that depend on anchor strings (``_anchor_exists``) will always fail
-    because the /sessions/{id} endpoint only returns ``anchors_count``, not the
-    anchor strings themselves.  This is noted in the ``error`` column with the
-    tag ``"http:no_anchor_strings"``.
-
     Args:
         profile:  Scenario profile to execute.
         n_turns:  Number of turns to run.
@@ -477,7 +470,7 @@ async def _run_scenario_http(
 
     for turn_script in script:
         t0 = time.perf_counter()
-        error: str = "http:no_anchor_strings"  # always annotate HTTP limitation
+        error: str = ""
         response_data: dict = {}
 
         try:
@@ -488,7 +481,7 @@ async def _run_scenario_http(
             est_resp.raise_for_status()
             response_data = est_resp.json()
         except Exception as exc:  # noqa: BLE001
-            error = f"http:no_anchor_strings;{type(exc).__name__}:{exc}"
+            error = f"{type(exc).__name__}:{exc}"
 
         latency_ms = round((time.perf_counter() - t0) * 1000, 1)
 
