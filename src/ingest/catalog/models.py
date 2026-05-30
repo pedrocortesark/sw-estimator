@@ -10,6 +10,7 @@ ingestion pipeline trusts*. Three decisions are valid:
 * ``exclude`` — explicitly out. A ``decision_reason`` is mandatory: excluding a
   source is a defensible call, not a silent omission.
 """
+
 from __future__ import annotations
 
 from datetime import datetime

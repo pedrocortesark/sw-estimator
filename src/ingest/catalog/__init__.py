@@ -5,6 +5,7 @@ A ``DataCatalog`` is *code* (Pydantic + YAML in git), not documentation. Each
 cadence, quality scores, sensitivity, lineage — and an explicit
 ``decision`` (include / review / exclude) with a reason for non-includes.
 """
+
 from src.ingest.catalog.loader import generate_audit_report, load_catalog
 from src.ingest.catalog.models import (
     CatalogDecision,

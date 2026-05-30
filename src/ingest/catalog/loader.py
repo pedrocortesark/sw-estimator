@@ -5,6 +5,7 @@ Reads a YAML file with ``yaml.safe_load``, validates it against
 all the heavy lifting (decision rules, duplicate detection) lives in the
 model, not here.
 """
+
 from __future__ import annotations
 
 import sys
@@ -69,7 +70,9 @@ def generate_audit_report(catalog: DataCatalog) -> str:
     lines += ["## Included Sources", ""]
     if included:
         for src in included:
-            rag_flag = "✅ rag_ready" if src.quality.is_rag_ready else "⚠️  not_rag_ready"
+            rag_flag = (
+                "✅ rag_ready" if src.quality.is_rag_ready else "⚠️  not_rag_ready"
+            )
             lines += [
                 f"### `{src.name}` ({src.format})  {rag_flag}",
                 "",
@@ -81,7 +84,11 @@ def generate_audit_report(catalog: DataCatalog) -> str:
                 f"- **Quality:** completeness={q.completeness} consistency={q.consistency}"
                 f" actuality={q.actuality} reliability={q.reliability}",
                 f"- **Sensitivity:** {src.sensitivity.access_level}"
-                + (f" — PII: {', '.join(src.sensitivity.pii_flags)}" if src.sensitivity.has_pii else ""),
+                + (
+                    f" — PII: {', '.join(src.sensitivity.pii_flags)}"
+                    if src.sensitivity.has_pii
+                    else ""
+                ),
                 "",
             ]
     else:

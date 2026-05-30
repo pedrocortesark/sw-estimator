@@ -1,4 +1,5 @@
 """Tests for src.ingest.catalog — models, loader, and audit report."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -143,7 +144,9 @@ def test_duplicate_source_name_raises():
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("bad_name", ["MySource", "my-source", "my source", "123source"])
+@pytest.mark.parametrize(
+    "bad_name", ["MySource", "my-source", "my source", "123source"]
+)
 def test_non_snake_case_name_raises(bad_name: str):
     with pytest.raises(ValidationError, match="snake_case"):
         _make_catalog(_make_source(name=bad_name))
