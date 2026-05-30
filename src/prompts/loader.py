@@ -95,3 +95,23 @@ def render_estimation_prompt(
             f"Unknown prompt version '{version}'. Available versions: {available}"
         )
     return system, user
+
+
+def render_summarizer_prompt(
+    accumulated_summary: str | None,
+    messages: list[dict],
+) -> str:
+    """Render the summarizer prompt for the given conversation window.
+
+    Args:
+        accumulated_summary: The current rolling summary (may be empty).
+        messages: List of message dicts with ``role`` and ``content`` keys.
+
+    Returns:
+        A single rendered string ready to send as a user message to the LLM.
+    """
+    template = _env.get_template("summarizer/v1.j2")
+    return template.render(
+        previous_summary=accumulated_summary or "",
+        messages=messages,
+    )
