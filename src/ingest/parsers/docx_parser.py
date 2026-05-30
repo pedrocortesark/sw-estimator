@@ -97,7 +97,9 @@ def parse(raw_bytes: bytes) -> list[ParsedSection]:
     # Flush last section
     _flush(sections, current_heading, current_level, current_lines, extra)
 
-    return sections or [ParsedSection(heading=None, heading_level=0, body="", extra=extra)]
+    return sections or [
+        ParsedSection(heading=None, heading_level=0, body="", extra=extra)
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -135,12 +137,16 @@ def _iter_blocks(doc: object):  # type: ignore[return]
             # Access the paragraph via the document paragraphs list is slow;
             # parse the XML directly for style and text.
             style_elem = element.find(f".//{{{_w}}}pStyle")
-            style_name = style_elem.get(f"{{{_w}}}val", "") if style_elem is not None else ""
-            text = "".join(
-                node.text or "" for node in element.iter(f"{{{_w}}}t")
+            style_name = (
+                style_elem.get(f"{{{_w}}}val", "") if style_elem is not None else ""
             )
+            text = "".join(node.text or "" for node in element.iter(f"{{{_w}}}t"))
             level = _heading_level(style_name)
-            yield {"type": "heading" if level else "paragraph", "text": text, "level": level}
+            yield {
+                "type": "heading" if level else "paragraph",
+                "text": text,
+                "level": level,
+            }
 
         elif tag == "tbl":
             yield {"type": "paragraph", "text": _table_to_markdown(element), "level": 0}
@@ -169,9 +175,11 @@ def _table_to_markdown(tbl_element: object) -> str:
     for tr in tbl_element.findall(f".//{{{_w}}}tr"):  # type: ignore[union-attr]
         cells: list[str] = []
         for tc in tr.findall(f".//{{{_w}}}tc"):
-            cell_text = "".join(
-                node.text or "" for node in tc.iter(f"{{{_w}}}t")
-            ).replace("|", "\\|").replace("\n", " ")
+            cell_text = (
+                "".join(node.text or "" for node in tc.iter(f"{{{_w}}}t"))
+                .replace("|", "\\|")
+                .replace("\n", " ")
+            )
             cells.append(cell_text)
         if cells:
             rows.append(cells)
@@ -182,7 +190,10 @@ def _table_to_markdown(tbl_element: object) -> str:
     col_count = max(len(r) for r in rows)
     padded = [r + [""] * (col_count - len(r)) for r in rows]
 
-    lines = ["| " + " | ".join(padded[0]) + " |", "| " + " | ".join(["---"] * col_count) + " |"]
+    lines = [
+        "| " + " | ".join(padded[0]) + " |",
+        "| " + " | ".join(["---"] * col_count) + " |",
+    ]
     for row in padded[1:]:
         lines.append("| " + " | ".join(row) + " |")
 

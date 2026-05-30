@@ -31,7 +31,7 @@ import logging
 from pathlib import Path
 from typing import Iterator
 
-from src.ingest.catalog import CatalogEntry, load_catalog
+from src.ingest.catalog import CatalogSource, load_catalog
 from src.ingest.models import Document
 
 logger = logging.getLogger(__name__)
@@ -79,9 +79,7 @@ def ingest(
         try:
             docs = _ingest_file(file_path, entry)
             documents.extend(docs)
-            logger.debug(
-                "ingested %d documents from %s", len(docs), file_path
-            )
+            logger.debug("ingested %d documents from %s", len(docs), file_path)
         except Exception:
             if fail_fast:
                 raise
@@ -126,7 +124,7 @@ def ingest_file(
 # ---------------------------------------------------------------------------
 
 
-def _iter_files(entry: CatalogEntry, base: Path) -> Iterator[Path]:
+def _iter_files(entry: CatalogSource, base: Path) -> Iterator[Path]:
     """Yield file paths for all files matching the catalog entry's location.
 
     If ``location`` is a directory, yields all files whose suffix matches the
@@ -155,7 +153,7 @@ def _iter_files(entry: CatalogEntry, base: Path) -> Iterator[Path]:
     logger.warning("Location '%s' does not exist — no files to ingest.", resolved)
 
 
-def _ingest_file(file_path: Path, entry: CatalogEntry) -> list[Document]:
+def _ingest_file(file_path: Path, entry: CatalogSource) -> list[Document]:
     """Run the full load → parse → normalize pipeline for one file."""
     from src.ingest import loaders  # noqa: PLC0415
     from src.ingest.normalizers import canonical  # noqa: PLC0415
@@ -173,26 +171,31 @@ def _ingest_file(file_path: Path, entry: CatalogEntry) -> list[Document]:
 
     if fmt == "json":
         from src.ingest.parsers import json_parser  # noqa: PLC0415
+
         ir = json_parser.parse(raw_bytes, source_hint=loc_str)
         return canonical.from_json_blocks(ir, entry, loc_str)
 
     if fmt == "txt":
         from src.ingest.parsers import txt_parser  # noqa: PLC0415
+
         ir = txt_parser.parse(raw_bytes)
         return canonical.from_turns(ir, entry, loc_str)
 
     if fmt == "xlsx":
         from src.ingest.parsers import xlsx_parser  # noqa: PLC0415
+
         ir = xlsx_parser.parse(raw_bytes, source_hint=loc_str)
         return canonical.from_xlsx_tables(ir, entry, loc_str)
 
     if fmt == "docx":
         from src.ingest.parsers import docx_parser  # noqa: PLC0415
+
         ir = docx_parser.parse(raw_bytes)
         return canonical.from_docx_sections(ir, entry, loc_str)
 
     if fmt == "pdf":
         from src.ingest.parsers import pdf_parser  # noqa: PLC0415
+
         ir = pdf_parser.parse(raw_bytes, strategy=entry.strategy, source_hint=loc_str)
         return canonical.from_pdf_pages(ir, entry, loc_str)
 

@@ -36,9 +36,7 @@ import re
 from dataclasses import dataclass
 
 # [hh:mm:ss] Speaker: text  (timestamp is optional sub-seconds)
-_TIMESTAMPED_RE = re.compile(
-    r"^\[(\d{1,2}:\d{2}:\d{2}(?:\.\d+)?)\]\s+([^:]+):\s+(.*)"
-)
+_TIMESTAMPED_RE = re.compile(r"^\[(\d{1,2}:\d{2}:\d{2}(?:\.\d+)?)\]\s+([^:]+):\s+(.*)")
 # Speaker: text  (legacy — speaker name has no brackets or timestamp prefix)
 _LEGACY_SPEAKER_RE = re.compile(r"^([A-Za-zÀ-ÖØ-öø-ÿ][^:]{0,39}):\s+(.*)")
 
@@ -117,7 +115,9 @@ def _parse_timestamped(lines: list[str]) -> list[Turn]:
         if m:
             if current is not None:
                 turns.append(current)
-            current = Turn(timestamp=m.group(1), speaker=m.group(2).strip(), text=m.group(3))
+            current = Turn(
+                timestamp=m.group(1), speaker=m.group(2).strip(), text=m.group(3)
+            )
         elif current is not None and line.strip():
             # Continuation line — append to current turn
             current = Turn(

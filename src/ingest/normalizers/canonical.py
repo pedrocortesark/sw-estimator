@@ -37,12 +37,12 @@ from src.ingest.parsers.txt_parser import Turn
 from src.ingest.parsers.xlsx_parser import ParsedTable
 
 if TYPE_CHECKING:
-    from src.ingest.catalog import CatalogEntry
+    from src.ingest.catalog import CatalogSource
 
 
 def from_json_blocks(
     blocks: list[ParsedBlock],
-    entry: "CatalogEntry",
+    entry: "CatalogSource",
     source_location: str,
 ) -> list[Document]:
     """Normalize JSON parser output."""
@@ -69,7 +69,7 @@ def from_json_blocks(
 
 def from_turns(
     turns: list[Turn],
-    entry: "CatalogEntry",
+    entry: "CatalogSource",
     source_location: str,
 ) -> list[Document]:
     """Normalize TXT parser output (speaker turns)."""
@@ -92,7 +92,7 @@ def from_turns(
 
 def from_xlsx_tables(
     tables: list[ParsedTable],
-    entry: "CatalogEntry",
+    entry: "CatalogSource",
     source_location: str,
 ) -> list[Document]:
     """Normalize XLSX parser output."""
@@ -116,7 +116,7 @@ def from_xlsx_tables(
 
 def from_docx_sections(
     sections: list[ParsedSection],
-    entry: "CatalogEntry",
+    entry: "CatalogSource",
     source_location: str,
 ) -> list[Document]:
     """Normalize DOCX parser output."""
@@ -154,7 +154,7 @@ def from_docx_sections(
 
 def from_pdf_pages(
     pages: list[ParsedPage],
-    entry: "CatalogEntry",
+    entry: "CatalogSource",
     source_location: str,
 ) -> list[Document]:
     """Normalize PDF parser output."""

@@ -63,9 +63,7 @@ def parse(raw_bytes: bytes, *, source_hint: str = "") -> list[ParsedBlock]:
     try:
         data = json.loads(raw_bytes)
     except json.JSONDecodeError as exc:
-        raise ValueError(
-            f"Cannot decode JSON from '{source_hint}': {exc}"
-        ) from exc
+        raise ValueError(f"Cannot decode JSON from '{source_hint}': {exc}") from exc
 
     if isinstance(data, list):
         return [

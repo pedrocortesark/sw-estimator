@@ -73,8 +73,7 @@ def parse(
         import openpyxl  # noqa: PLC0415
     except ImportError as exc:
         raise ImportError(
-            "openpyxl is required for XLSX parsing.  "
-            "Add it with: uv add openpyxl"
+            "openpyxl is required for XLSX parsing.  Add it with: uv add openpyxl"
         ) from exc
 
     try:
@@ -82,9 +81,7 @@ def parse(
             io.BytesIO(raw_bytes), read_only=True, data_only=True
         )
     except Exception as exc:
-        raise ValueError(
-            f"Cannot open XLSX workbook '{source_hint}': {exc}"
-        ) from exc
+        raise ValueError(f"Cannot open XLSX workbook '{source_hint}': {exc}") from exc
 
     tables: list[ParsedTable] = []
     for sheet in wb.worksheets:

@@ -89,8 +89,7 @@ def load_catalog(path: str | Path) -> dict[str, CatalogEntry]:
         import yaml  # noqa: PLC0415
     except ImportError as exc:
         raise ImportError(
-            "PyYAML is required to load data_catalog.yaml.  "
-            "Install with: uv add pyyaml"
+            "PyYAML is required to load data_catalog.yaml.  Install with: uv add pyyaml"
         ) from exc
 
     catalog_path = Path(path)
@@ -107,7 +106,9 @@ def load_catalog(path: str | Path) -> dict[str, CatalogEntry]:
     catalog: dict[str, CatalogEntry] = {}
     for item in raw["sources"]:
         if not isinstance(item, dict):
-            raise ValueError(f"Each entry in 'sources' must be a mapping; got: {item!r}")
+            raise ValueError(
+                f"Each entry in 'sources' must be a mapping; got: {item!r}"
+            )
         try:
             entry = CatalogEntry(
                 source_name=item["source_name"],
@@ -118,7 +119,14 @@ def load_catalog(path: str | Path) -> dict[str, CatalogEntry]:
                 extra={
                     k: v
                     for k, v in item.items()
-                    if k not in ("source_name", "location", "format", "description", "strategy")
+                    if k
+                    not in (
+                        "source_name",
+                        "location",
+                        "format",
+                        "description",
+                        "strategy",
+                    )
                 },
             )
         except KeyError as exc:

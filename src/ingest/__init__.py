@@ -36,14 +36,14 @@ See :mod:`src.ingest.orchestrator` for the end-to-end pipeline.
 See :mod:`src.ingest.catalog` for the ``data_catalog.yaml`` schema.
 """
 
-from src.ingest.catalog import CatalogEntry, load_catalog
+from src.ingest.catalog import CatalogSource, load_catalog
 from src.ingest.models import Document, DocumentMetadata
 from src.ingest.orchestrator import ingest, ingest_file
 
 __all__ = [
     "Document",
     "DocumentMetadata",
-    "CatalogEntry",
+    "CatalogSource",
     "load_catalog",
     "ingest",
     "ingest_file",
