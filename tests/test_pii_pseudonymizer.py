@@ -3,6 +3,7 @@
 We use a StubAnalyzer to avoid loading the spaCy model in tests.
 The stub lets us control exactly which entities get detected and where.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -77,12 +78,14 @@ def test_same_value_produces_same_pseudonym_in_same_call():
     # text[20:31] == "Juan García"
     assert text[0:11] == "Juan García"
     assert text[20:31] == "Juan García"
-    analyzer = _StubAnalyzer({
-        text: [
-            _StubResult("PERSON", 0, 11),   # primer "Juan García"
-            _StubResult("PERSON", 20, 31),  # segundo "Juan García"
-        ]
-    })
+    analyzer = _StubAnalyzer(
+        {
+            text: [
+                _StubResult("PERSON", 0, 11),  # primer "Juan García"
+                _StubResult("PERSON", 20, 31),  # segundo "Juan García"
+            ]
+        }
+    )
     p = _build_pseudonymizer(analyzer)
     result = p.pseudonymize(text)
     # Both occurrences must map to the same pseudonym.
@@ -94,10 +97,12 @@ def test_same_value_produces_same_pseudonym_across_calls():
     text1 = "Contrato con Laura Fernández."
     text2 = "Email de Laura Fernández recibido."
     store = InMemoryMappingStore()
-    analyzer = _StubAnalyzer({
-        text1: [_StubResult("PERSON", 13, 28)],
-        text2: [_StubResult("PERSON", 9, 24)],
-    })
+    analyzer = _StubAnalyzer(
+        {
+            text1: [_StubResult("PERSON", 13, 28)],
+            text2: [_StubResult("PERSON", 9, 24)],
+        }
+    )
     p = _build_pseudonymizer(analyzer, store)
     r1 = p.pseudonymize(text1)
     r2 = p.pseudonymize(text2)
@@ -111,12 +116,14 @@ def test_same_value_produces_same_pseudonym_across_calls():
 
 def test_different_values_produce_different_pseudonyms():
     text = "Laura Fernández habló con Javier Romero."
-    analyzer = _StubAnalyzer({
-        text: [
-            _StubResult("PERSON", 0, 15),   # "Laura Fernández"
-            _StubResult("PERSON", 25, 39),  # "Javier Romero"
-        ]
-    })
+    analyzer = _StubAnalyzer(
+        {
+            text: [
+                _StubResult("PERSON", 0, 15),  # "Laura Fernández"
+                _StubResult("PERSON", 25, 39),  # "Javier Romero"
+            ]
+        }
+    )
     p = _build_pseudonymizer(analyzer)
     result = p.pseudonymize(text)
     assert result.applied[0].pseudonym != result.applied[1].pseudonym
@@ -130,12 +137,14 @@ def test_different_values_produce_different_pseudonyms():
 def test_left_entity_offset_not_corrupted_by_right_replacement():
     """Replacing right-to-left must keep left entity offset valid."""
     text = "AAA BBB"  # two entities side by side
-    analyzer = _StubAnalyzer({
-        text: [
-            _StubResult("PERSON", 0, 3),  # "AAA"
-            _StubResult("PERSON", 4, 7),  # "BBB"
-        ]
-    })
+    analyzer = _StubAnalyzer(
+        {
+            text: [
+                _StubResult("PERSON", 0, 3),  # "AAA"
+                _StubResult("PERSON", 4, 7),  # "BBB"
+            ]
+        }
+    )
     p = _build_pseudonymizer(analyzer)
     result = p.pseudonymize(text)
     # Both entities must have been replaced (text changed, no IndexError)
@@ -168,6 +177,7 @@ def test_budget_id_replaced_with_budget_format():
     p = _build_pseudonymizer(analyzer)
     result = p.pseudonymize(text)
     import re
+
     assert re.search(r"BUDGET-\d{4}-\d{4}", result.pseudonymized_text)
 
 
@@ -177,6 +187,7 @@ def test_client_code_replaced_with_cli_format():
     p = _build_pseudonymizer(analyzer)
     result = p.pseudonymize(text)
     import re
+
     assert re.search(r"CLI-\d{4}", result.pseudonymized_text)
 
 
@@ -204,7 +215,9 @@ def test_forget_causes_new_pseudonym_on_next_call():
     # After forget(), a new pseudonym is generated (statistically distinct)
     # We can't guarantee inequality with Faker, but the store no longer has
     # the old entry — verify it was re-created
-    assert store.lookup_or_create("ORGANIZATION", original_hash, lambda: "x") is not None
+    assert (
+        store.lookup_or_create("ORGANIZATION", original_hash, lambda: "x") is not None
+    )
 
 
 def test_forget_returns_true_when_entry_existed():

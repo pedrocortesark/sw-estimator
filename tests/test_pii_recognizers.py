@@ -3,6 +3,7 @@
 PatternRecognizers operate purely on regex — no spaCy model needed.
 We call `.analyze()` directly with `nlp_artifacts=None` to keep tests fast.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -103,7 +104,9 @@ def test_client_code_score_high():
 def test_client_code_span_correct():
     text = "Código: CLI-0099 registrado."
     recognizer = ClientCodeRecognizer()
-    results = recognizer.analyze(text=text, entities=["CLIENT_CODE"], nlp_artifacts=None)
+    results = recognizer.analyze(
+        text=text, entities=["CLIENT_CODE"], nlp_artifacts=None
+    )
     assert text[results[0].start : results[0].end] == "CLI-0099"
 
 
