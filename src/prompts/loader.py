@@ -57,6 +57,7 @@ def render_estimation_prompt(
     version: str = "v1",
     model: str | None = None,
     prompt_style: str | None = None,
+    project_metadata=None,
 ) -> tuple[str, str]:
     """Render the system and user prompts for the given request.
 
@@ -84,9 +85,14 @@ def render_estimation_prompt(
         "reference_projects": getattr(request, "reference_projects", None) or [],
     }
 
-    # project_metadata is an optional dict; pre-populate all known template fields
-    # so that StrictUndefined never raises on missing attributes.
-    _pm = getattr(request, "project_metadata", None) or {}
+    # project_metadata may be passed explicitly or carried on the request object.
+    # Pre-populate all known template fields so StrictUndefined never raises.
+    _pm_raw = (
+        project_metadata
+        if project_metadata is not None
+        else getattr(request, "project_metadata", None)
+    )
+    _pm = _pm_raw or {}
     ctx["project_metadata"] = {
         "project_name": _pm.get("project_name")
         if isinstance(_pm, dict)
