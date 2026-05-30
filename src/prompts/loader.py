@@ -84,6 +84,24 @@ def render_estimation_prompt(
         "reference_projects": getattr(request, "reference_projects", None) or [],
     }
 
+    # project_metadata is an optional dict; pre-populate all known template fields
+    # so that StrictUndefined never raises on missing attributes.
+    _pm = getattr(request, "project_metadata", None) or {}
+    ctx["project_metadata"] = {
+        "project_name": _pm.get("project_name")
+        if isinstance(_pm, dict)
+        else getattr(_pm, "project_name", None),
+        "assumed_team_size": _pm.get("assumed_team_size")
+        if isinstance(_pm, dict)
+        else getattr(_pm, "assumed_team_size", None),
+        "mentioned_technologies": _pm.get("mentioned_technologies")
+        if isinstance(_pm, dict)
+        else getattr(_pm, "mentioned_technologies", None),
+        "agreed_scope": _pm.get("agreed_scope")
+        if isinstance(_pm, dict)
+        else getattr(_pm, "agreed_scope", None),
+    }
+
     try:
         system = _env.get_template(f"estimation/{version}/system.j2").render(**ctx)
         user = _env.get_template(f"estimation/{version}/user.j2").render(**ctx)
