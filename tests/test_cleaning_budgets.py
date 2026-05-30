@@ -1,4 +1,5 @@
 """Tests for clean_budget_records() — five cleaning steps."""
+
 from __future__ import annotations
 
 import pandas as pd
@@ -24,7 +25,10 @@ def _base_record(**overrides) -> dict:
 # Paso 1 — nulos disfrazados
 # ---------------------------------------------------------------------------
 
-@pytest.mark.parametrize("placeholder", ["TBD", "N/A", "n/a", "tbd", "", "null", "None", "-"])
+
+@pytest.mark.parametrize(
+    "placeholder", ["TBD", "N/A", "n/a", "tbd", "", "null", "None", "-"]
+)
 def test_null_placeholder_in_client_name_becomes_na(placeholder):
     df = clean_budget_records([_base_record(client_name=placeholder)])
     assert pd.isna(df.loc[0, "client_name"])
@@ -46,12 +50,16 @@ def test_null_placeholder_only_affects_optional_text_columns():
 # Paso 2 — currency casing
 # ---------------------------------------------------------------------------
 
-@pytest.mark.parametrize("raw,expected", [
-    ("eur", "EUR"),
-    ("Eur", "EUR"),
-    ("USD", "USD"),
-    ("usd", "USD"),
-])
+
+@pytest.mark.parametrize(
+    "raw,expected",
+    [
+        ("eur", "EUR"),
+        ("Eur", "EUR"),
+        ("USD", "USD"),
+        ("usd", "USD"),
+    ],
+)
 def test_currency_normalised_to_uppercase(raw, expected):
     df = clean_budget_records([_base_record(currency=raw)])
     assert df.loc[0, "currency"] == expected
@@ -66,6 +74,7 @@ def test_unknown_currency_preserved_as_uppercase():
 # ---------------------------------------------------------------------------
 # Paso 3 — date coercion
 # ---------------------------------------------------------------------------
+
 
 def test_iso_date_parsed_correctly():
     df = clean_budget_records([_base_record(signed_at="2024-03-15")])
@@ -92,6 +101,7 @@ def test_unparseable_date_becomes_nat():
 # Paso 4 — numeric coercion
 # ---------------------------------------------------------------------------
 
+
 def test_string_amount_coerced_to_float():
     df = clean_budget_records([_base_record(total_amount="80000")])
     assert df.loc[0, "total_amount"] == 80000.0
@@ -105,6 +115,7 @@ def test_non_numeric_amount_becomes_nan():
 # ---------------------------------------------------------------------------
 # Paso 5 — dedup por budget_id con regla "keep latest signed_at"
 # ---------------------------------------------------------------------------
+
 
 def test_exact_duplicate_is_removed():
     records = [_base_record(), _base_record()]
@@ -134,6 +145,7 @@ def test_divergent_duplicate_older_row_not_kept():
 # ---------------------------------------------------------------------------
 # Comportamiento general
 # ---------------------------------------------------------------------------
+
 
 def test_empty_input_returns_empty_dataframe():
     df = clean_budget_records([])
