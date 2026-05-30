@@ -24,7 +24,6 @@ from pathlib import Path
 from jinja2 import Environment, FileSystemLoader, StrictUndefined, TemplateNotFound
 
 from src.schemas.estimation import EstimationRequest
-from src.services.sessions import ProjectMetadata
 
 # Root of all templates = the directory that contains this file.
 _TEMPLATES_DIR = Path(__file__).parent
@@ -58,7 +57,6 @@ def render_estimation_prompt(
     version: str = "v1",
     model: str | None = None,
     prompt_style: str | None = None,
-    project_metadata: ProjectMetadata | None = None,
 ) -> tuple[str, str]:
     """Render the system and user prompts for the given request.
 
@@ -84,7 +82,6 @@ def render_estimation_prompt(
         "output_format": _val("output_format", "phases_table"),
         "prompt_style": prompt_style or _infer_prompt_style(model),
         "reference_projects": getattr(request, "reference_projects", None) or [],
-        "project_metadata": project_metadata or ProjectMetadata(),
     }
 
     try:
@@ -98,17 +95,3 @@ def render_estimation_prompt(
             f"Unknown prompt version '{version}'. Available versions: {available}"
         )
     return system, user
-
-
-def render_summarizer_prompt(previous_summary: str, messages: list[dict]) -> str:
-    """Render the summarizer prompt for the given conversation messages.
-
-    Args:
-        previous_summary: Accumulated summary from previous turns (may be empty).
-        messages: Current conversation messages in ``{role, content}`` format.
-
-    Returns:
-        Rendered prompt string ready to send as a user message.
-    """
-    template = _env.get_template("summarizer/v1.j2")
-    return template.render(previous_summary=previous_summary, messages=messages)

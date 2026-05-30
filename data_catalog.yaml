@@ -1,0 +1,53 @@
+# Data catalog for the ingest subsystem
+# ----------------------------------------
+# Each entry under `sources` describes one ingestion source.
+# The orchestrator reads this file to decide which loader and parser to use.
+#
+# Required fields per entry:
+#   source_name : stable identifier (used in DocumentMetadata.source_name)
+#   location    : local path (relative to this file's directory) or URL
+#   format      : one of json | txt | xlsx | docx | pdf
+#
+# Optional fields:
+#   description : human-readable summary of the source
+#   strategy    : pdf only — "fast" (pypdf, default) or "hi_res" (unstructured)
+
+sources:
+  - source_name: historical_budgets
+    location: data/budgets/
+    format: json
+    description: >
+      Historical project budget records exported from the project management
+      system.  One JSON file per project, each containing the budget breakdown
+      by phase and role.
+
+  - source_name: meeting_transcripts
+    location: data/transcripts/
+    format: txt
+    description: >
+      Client meeting transcriptions.  Files from 2024 onwards use the
+      timestamped format [hh:mm:ss] Speaker: text.  Earlier files may have
+      heterogeneous formats.
+
+  - source_name: signed_contracts
+    location: data/contracts/
+    format: pdf
+    strategy: fast
+    description: >
+      Digitally-generated signed contracts in PDF format.  Pypdf fast
+      extraction is sufficient — no scanned pages or complex tables.
+
+  - source_name: proposal_templates
+    location: data/proposals/
+    format: docx
+    description: >
+      Word proposal templates structured with Heading styles
+      (Alcance, Entregables, Cronograma, Supuestos, …).
+      Each section is emitted as a separate Document.
+
+  - source_name: rate_cards
+    location: data/rate_cards/
+    format: xlsx
+    description: >
+      Role and rate spreadsheets.  One table per worksheet; each worksheet
+      becomes a separate Document with the sheet name as section_title.
