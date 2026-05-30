@@ -87,7 +87,11 @@ def render_estimation_prompt(
 
     # project_metadata may be passed explicitly or carried on the request object.
     # Pre-populate all known template fields so StrictUndefined never raises.
-    _pm_raw = project_metadata if project_metadata is not None else getattr(request, "project_metadata", None)
+    _pm_raw = (
+        project_metadata
+        if project_metadata is not None
+        else getattr(request, "project_metadata", None)
+    )
     _pm = _pm_raw or {}
     ctx["project_metadata"] = {
         "project_name": _pm.get("project_name")
