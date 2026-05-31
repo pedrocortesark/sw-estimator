@@ -112,6 +112,34 @@ docker compose up --build
 
 Levanta `api` + `streamlit` + `redis` en contenedores. Streamlit se comunica con la API via red interna Docker (`http://api:8000`).
 
+## Script `compare.py` — similitud coseno entre textos
+
+Calcula la similitud coseno entre dos textos libres usando `text-embedding-3-small`.
+
+**Fuera del contenedor** (requiere `.env` con `OPENAI_API_KEY`):
+
+```bash
+uv run python scripts/compare.py \
+  --text-a "OAuth 2.0 authentication backend for fintech" \
+  --text-b "JWT-based authorization service for banking app"
+```
+
+**Dentro del contenedor** (el servicio `api` ya tiene las variables de entorno):
+
+```bash
+docker compose exec servicio_ia python scripts/compare.py \
+  --text-a "OAuth 2.0 authentication backend for fintech" \
+  --text-b "JWT-based authorization service for banking app"
+```
+
+Salida:
+
+```
+Text A: OAuth 2.0 authentication backend for fintech
+Text B: JWT-based authorization service for banking app
+Cosine similarity: 0.8421
+```
+
 ## Demo
 
 ![Conversación multi-turno con panel de project_metadata](docs/assets/session-3turns.jpg)
