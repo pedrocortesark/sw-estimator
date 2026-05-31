@@ -1,11 +1,17 @@
 [
     {
         "budget_id": "BUDGET-2024-0001",
+        "year": 2024,
         "client_name": "Acme España S.L.",
         "client_code": "CLI-0042",
+        "contact": "Laura Fernández",
+        "contact_email": "laura.fernandez@acme.es",
+        "project_summary": "Portal B2B SaaS interno con módulo de facturación e integración a Workday para gestión de proveedores.",
+        "main_technology": "React + FastAPI + Workday API",
+        "sector": "saas_b2b",
         "currency": "EUR",
         "total_amount": 45000,
-        "signed_at": "2024-02-14",
+        "total_estimated_hours": 360,
         "phases": [
             {
                 "name": "Discovery",
@@ -28,17 +34,21 @@
                 "amount": 5000
             }
         ],
-        "contact": "Laura Fernández",
-        "contact_email": "laura.fernandez@acme.es",
         "notes": "Proyecto B2B SaaS interno con integración a Workday."
     },
     {
         "budget_id": "BUDGET-2024-0002",
+        "year": 2024,
         "client_name": "BetaNorte Distribución",
         "client_code": "CLI-0078",
+        "contact": "Javier Romero",
+        "contact_email": "j.romero@betanorte.com",
+        "project_summary": "Migración del ERP legado a plataforma moderna con backend de integraciones y cuadros de mando para tres almacenes.",
+        "main_technology": "SAP + Power BI",
+        "sector": "erp_integration",
         "currency": "EUR",
         "total_amount": 28000,
-        "signed_at": "2024-03-12",
+        "total_estimated_hours": 224,
         "phases": [
             {
                 "name": "Auditoría procesos",
@@ -56,17 +66,21 @@
                 "amount": 8000
             }
         ],
-        "contact": "Javier Romero",
-        "contact_email": "j.romero@betanorte.com",
         "notes": "Migración del ERP legado. Tres almacenes."
     },
     {
         "budget_id": "BUDGET-2024-0005",
+        "year": 2024,
         "client_name": "Industrias Toledo",
         "client_code": "CLI-0288",
+        "contact": "Carmen Vidal",
+        "contact_email": "carmen.vidal@toledo-ind.es",
+        "project_summary": "Plataforma de gestión de producción industrial con módulo de reporting regulatorio y refactor del sistema de crédito interno.",
+        "main_technology": "Python + PostgreSQL",
+        "sector": "other",
         "currency": "EUR",
         "total_amount": 32000,
-        "signed_at": "2024-04-12",
+        "total_estimated_hours": 256,
         "phases": [
             {
                 "name": "Discovery",
@@ -79,8 +93,6 @@
                 "amount": 26000
             }
         ],
-        "contact": "Carmen Vidal",
-        "contact_email": "carmen.vidal@toledo-ind.es",
         "notes": "Revisión tras alcance ampliado en reunión del 11/04."
     }
 ]
