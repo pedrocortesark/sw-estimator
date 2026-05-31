@@ -5,7 +5,7 @@ Uso:
     python scripts/compare.py --text-a "..." --text-b "..."
 
 Dentro del contenedor:
-    docker compose exec servicio_ia python scripts/compare.py --text-a "..." --text-b "..."
+    docker compose exec api python scripts/compare.py --text-a "..." --text-b "..."
 
 Fuera del contenedor (carga el .env automáticamente):
     uv run python scripts/compare.py --text-a "..." --text-b "..."

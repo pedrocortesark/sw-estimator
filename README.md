@@ -127,7 +127,7 @@ uv run python scripts/compare.py \
 **Dentro del contenedor** (el servicio `api` ya tiene las variables de entorno):
 
 ```bash
-docker compose exec servicio_ia python scripts/compare.py \
+docker compose exec api python scripts/compare.py \
   --text-a "OAuth 2.0 authentication backend for fintech" \
   --text-b "JWT-based authorization service for banking app"
 ```
