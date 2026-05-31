@@ -14,22 +14,53 @@
         "total_estimated_hours": 360,
         "phases": [
             {
+                "component_id": "DISC-001",
                 "name": "Discovery",
+                "description": "Talleres de requisitos con el cliente, mapeo de procesos actuales y definición del alcance funcional del portal.",
+                "tech_stack": [],
+                "complexity": "low",
+                "estimated_hours": 64,
                 "weeks": 2,
                 "amount": 8000
             },
             {
+                "component_id": "UX-001",
                 "name": "Diseño UX",
+                "description": "Diseño de wireframes, prototipo interactivo en Figma y validación con usuarios finales del cliente.",
+                "tech_stack": [
+                    "Figma"
+                ],
+                "complexity": "medium",
+                "estimated_hours": 96,
                 "weeks": 3,
                 "amount": 12000
             },
             {
+                "component_id": "DEV-001",
                 "name": "Implementación MVP",
+                "description": "Desarrollo del portal SaaS B2B con módulo de facturación, integración a Workday API y autenticación SSO.",
+                "tech_stack": [
+                    "React",
+                    "FastAPI",
+                    "PostgreSQL",
+                    "Workday API"
+                ],
+                "complexity": "high",
+                "estimated_hours": 160,
                 "weeks": 6,
                 "amount": 20000
             },
             {
+                "component_id": "QA-001",
                 "name": "Pruebas y despliegue",
+                "description": "Pruebas de integración, regresión y despliegue en entorno de producción con pipeline CI/CD.",
+                "tech_stack": [
+                    "Pytest",
+                    "GitHub Actions",
+                    "Docker"
+                ],
+                "complexity": "medium",
+                "estimated_hours": 40,
                 "weeks": 1,
                 "amount": 5000
             }
@@ -51,17 +82,39 @@
         "total_estimated_hours": 224,
         "phases": [
             {
+                "component_id": "AUD-001",
                 "name": "Auditoría procesos",
+                "description": "Análisis de los flujos actuales del ERP legado e identificación de gaps funcionales para los tres almacenes.",
+                "tech_stack": [],
+                "complexity": "medium",
+                "estimated_hours": 64,
                 "weeks": 2,
                 "amount": 6000
             },
             {
+                "component_id": "INT-001",
                 "name": "Backend integraciones",
+                "description": "Desarrollo del layer de integración entre el ERP legado y el nuevo sistema, incluyendo transformaciones de datos y conectores SAP.",
+                "tech_stack": [
+                    "Python",
+                    "SAP BAPI",
+                    "PostgreSQL"
+                ],
+                "complexity": "high",
+                "estimated_hours": 128,
                 "weeks": 4,
                 "amount": 14000
             },
             {
+                "component_id": "BI-001",
                 "name": "Cuadros de mando",
+                "description": "Creación de dashboards operativos en Power BI con KPIs de inventario, logística y ventas por almacén.",
+                "tech_stack": [
+                    "Power BI",
+                    "DAX"
+                ],
+                "complexity": "medium",
+                "estimated_hours": 64,
                 "weeks": 2,
                 "amount": 8000
             }
@@ -83,12 +136,26 @@
         "total_estimated_hours": 256,
         "phases": [
             {
+                "component_id": "DISC-001",
                 "name": "Discovery",
+                "description": "Levantamiento de requisitos industriales, análisis del sistema de crédito actual y definición de la arquitectura objetivo.",
+                "tech_stack": [],
+                "complexity": "medium",
+                "estimated_hours": 64,
                 "weeks": 2,
                 "amount": 6000
             },
             {
+                "component_id": "DEV-001",
                 "name": "Implementación",
+                "description": "Desarrollo de la plataforma de gestión de producción con módulo de reporting regulatorio y refactor del sistema de crédito.",
+                "tech_stack": [
+                    "Python",
+                    "PostgreSQL",
+                    "FastAPI"
+                ],
+                "complexity": "high",
+                "estimated_hours": 192,
                 "weeks": 6,
                 "amount": 26000
             }

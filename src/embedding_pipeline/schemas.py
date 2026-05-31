@@ -24,6 +24,7 @@ Sector = Literal[
 ]
 
 Currency = Literal["EUR", "USD", "GBP"]
+Complexity = Literal["low", "medium", "high"]
 
 
 # ---------------------------------------------------------------------------
@@ -34,7 +35,20 @@ Currency = Literal["EUR", "USD", "GBP"]
 class BudgetComponent(BaseModel):
     """A single phase / work-package inside a budget."""
 
+    component_id: str = Field(
+        description="Short unique identifier within the budget, e.g. 'DISC-001'."
+    )
     name: str = Field(description="Phase or component name.")
+    description: str = Field(
+        description="What this component delivers in 1-3 sentences."
+    )
+    tech_stack: list[str] = Field(
+        default_factory=list, description="Technologies involved in this component."
+    )
+    complexity: Complexity = "medium"
+    estimated_hours: int = Field(
+        ge=0, description="Estimated effort for this component in person-hours."
+    )
     weeks: int | None = Field(default=None, ge=0, description="Duration in weeks.")
     amount: float = Field(description="Component cost in the budget currency.")
 
