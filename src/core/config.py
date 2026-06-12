@@ -67,6 +67,12 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     anthropic_api_key: str = ""
 
+    # --- Persistence (Session 8 — pgvector) ---
+    # Canonical URL for the async engine. The RAG store is on the real-time
+    # request path, so it uses asyncpg; Alembic derives the sync psycopg URL
+    # in ``alembic/env.py`` from this same setting.
+    database_url: str = "postgresql+asyncpg://estimator:estimator@localhost:5432/estimator"
+
 
 @lru_cache
 def get_settings() -> Settings:
