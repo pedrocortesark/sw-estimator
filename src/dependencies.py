@@ -11,6 +11,94 @@ from src.services.estimation import EstimationService
 logger = structlog.get_logger()
 
 
+# --- Session 8: pgvector persistence + semantic search ---------------------
+
+
+@lru_cache
+def get_openai_client():
+    """Lazy OpenAI client used by the embedding pipeline (Session 8).
+
+    Returns ``None`` when no API key is configured; the routers map that to a
+    500 with a generic message. The contract matches the existing semantic
+    cache one (``_make_semantic_cache``) for symmetry.
+    """
+    from openai import OpenAI
+
+    from src.core.config import get_settings
+
+    settings = get_settings()
+    if not settings.openai_api_key:
+        logger.warning("openai_client_disabled", reason="no_openai_key")
+        return None
+    return OpenAI(api_key=settings.openai_api_key)
+
+
+@lru_cache
+def get_chunker():
+    """Stateless structural chunker for the embedding pipeline (Session 8)."""
+    from src.rag.chunking.structural import JSONStructuralChunker
+
+    return JSONStructuralChunker()
+
+
+@lru_cache
+def get_embedder():
+    """OpenAI embedder. ``None`` when no API key is configured."""
+    from src.rag.embedding.embedder import OpenAIEmbedder
+
+    client = get_openai_client()
+    if client is None:
+        return None
+    # The embedder is hard-wired to text-embedding-3-small (1536 dims) — its
+    # dimensionality is baked into the chunks.embedding column Vector(1536).
+    # Using a chat model like gpt-4o-mini here triggers a 403.
+    return OpenAIEmbedder(client=client)
+
+
+@lru_cache
+def get_chunk_store():
+    """Stateless async data-access layer over documents/chunks."""
+    from src.rag.store.repository import ChunkStore
+
+    return ChunkStore()
+
+
+@lru_cache
+def get_rag_ingest_service():
+    """Chunk → embed → persist orchestration. ``None`` without an OpenAI key;
+    the router maps that to a 500."""
+    from src.rag.ingest_service import RagIngestService
+
+    from src.persistence.database import get_async_session_factory
+
+    embedder = get_embedder()
+    if embedder is None:
+        return None
+    return RagIngestService(
+        chunker=get_chunker(),
+        embedder=embedder,
+        session_factory=get_async_session_factory(),
+        store=get_chunk_store(),
+    )
+
+
+@lru_cache
+def get_semantic_retriever():
+    """Query-side counterpart of the ingest service. Same ``None`` contract."""
+    from src.rag.retriever import SemanticRetriever
+
+    from src.persistence.database import get_async_session_factory
+
+    embedder = get_embedder()
+    if embedder is None:
+        return None
+    return SemanticRetriever(
+        embedder=embedder,
+        session_factory=get_async_session_factory(),
+        store=get_chunk_store(),
+    )
+
+
 def _make_semantic_cache():
     """Try to create a Redis-backed ``EstimationSemanticCache``.
 

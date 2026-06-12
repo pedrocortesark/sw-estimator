@@ -192,7 +192,42 @@ futuro la precisión en detección de tecnologías fuera insuficiente, se puede
 sustituir únicamente `_extract_technologies()` por una llamada LLM sin tocar el
 resto del pipeline.
 
-## Caché
+## Persistencia RAG — pgvector + búsqueda semántica (Sesión 8)
+
+El endpoint `POST /embeddings/ingest` ingiere un presupuesto (un `Budget` JSON) y lo persiste como un `Document` con N `Chunk`s, cada uno con su embedding `Vector(1536)`, en una sola transacción. El endpoint `POST /search` resuelve la query embedding-eando la query y ejecutando `cosine_distance` directamente en SQL (sequential scan; el índice vectorial se añade en directo).
+
+### Decisiones de schema — defensa en directo
+
+**(a) Por qué dos tablas (`documents` y `chunks`) y no una sola.**
+
+Un presupuesto produce N componentes → N chunks. Con una sola tabla, la metadata del documento se duplica en cada chunk (alto coste de almacenamiento, riesgo de inconsistencia) y la integridad referencial se pierde. Con dos tablas y `ON DELETE CASCADE`, eliminar un `document` arrastra sus chunks automáticamente — la BD garantiza la invariante en lugar del código de aplicación.
+
+**(b) Por qué `metadata` como JSONB en lugar de columnas tipadas.**
+
+Metadata estable (`source_path`, `document_type`, `ingested_at`) vive en columnas tipadas — son los campos sobre los que filtramos siempre. Metadata variable (sector, technologies, year, complexity, estimated_hours, scope…) enriquece cada chunk con campos que el chunker puede ir extendiendo sin migración. El índice GIN sobre `chunks.metadata` permite consultar por claves arbitrarias (`metadata->>'sector' = 'finance'`) sin migrar el schema. Si todo fuera columnas tipadas, añadir un campo nuevo al chunker sería una migración + un ALTER TABLE; con JSONB es solo un `metadata_.update({...})` en el chunker.
+
+**(c) Por qué `cosine_distance` y no L2 ni inner product.**
+
+Los embeddings de `text-embedding-3-small` están normalizados, así que cosine y L2 darían rankings equivalentes en la práctica — pero cosine es la convención RAG. La razón operativa es que la operator class de los índices HNSW/IVFFlat que añadiremos en directo (`vector_cosine_ops`) **debe coincidir** con el operador de la query. Si la query usa `<=>` y el índice está construido con `vector_l2_ops`, Postgres lo ignora silenciosamente y cae a sequential scan **sin avisar**. Alinear query e índice desde el baseline evita ese footgun.
+
+**(d) Por qué deliberadamente no hay índice vectorial todavía.**
+
+El sequential scan es la baseline contra la que mediremos el impacto del índice HNSW en directo. Si lo añadiera "preventivamente", el directo pierde su número clave: latencia antes / latencia después. Es la misma lógica que la de "no premature optimization", pero a nivel de schema.
+
+### Comandos
+
+```bash
+# Arrancar Postgres + Redis + API
+docker compose up -d
+
+# Aplicar migraciones (crea extension + documents + chunks)
+docker compose run --rm api alembic upgrade head
+
+# Smoke test: ingiere el corpus y lanza 5 queries
+docker compose run --rm api python scripts/query_examples.py
+```
+
+
 
 | Tipo | Tecnología | Cuando aplica |
 |---|---|---|
