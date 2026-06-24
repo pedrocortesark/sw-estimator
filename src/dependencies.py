@@ -99,6 +99,18 @@ def get_semantic_retriever():
     )
 
 
+# --- Session 10: cross-encoder reranking ------------------------------------
+
+
+@lru_cache
+def get_reranker():
+    """Cross-encoder reranker singleton (Session 10). The model loads lazily on
+    the first rerank, so building this is cheap and import-time has no torch cost."""
+    from src.generation.rag.retrieval.reranker import CrossEncoderReranker
+
+    return CrossEncoderReranker.from_settings()
+
+
 def _make_semantic_cache():
     """Try to create a Redis-backed ``EstimationSemanticCache``.
 

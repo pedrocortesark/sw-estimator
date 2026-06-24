@@ -73,6 +73,10 @@ class Settings(BaseSettings):
     # in ``alembic/env.py`` from this same setting.
     database_url: str = "postgresql+asyncpg://estimator:estimator@localhost:5432/estimator"
 
+    # --- Session 10 — cross-encoder reranking ---
+    reranker_enabled: bool = False
+    reranker_model: str = "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"
+
 
 @lru_cache
 def get_settings() -> Settings:
