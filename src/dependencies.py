@@ -64,6 +64,18 @@ def get_chunk_store():
 
 
 @lru_cache
+def get_generation_chunk_store():
+    """Stateless async data-access layer for the generation pipeline (Session 9/10).
+
+    This is the ChunkStore with search_filtered() and search_lexical() methods
+    needed by the hybrid retrieval pipeline.
+    """
+    from src.generation.rag.store.repository import ChunkStore
+
+    return ChunkStore()
+
+
+@lru_cache
 def get_rag_ingest_service():
     """Chunk → embed → persist orchestration. ``None`` without an OpenAI key;
     the router maps that to a 500."""
