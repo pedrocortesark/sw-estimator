@@ -273,3 +273,32 @@ tests/
 dev.sh                           # Script de arranque local
 docker-compose.yml               # Redis Stack + API + Streamlit
 ```
+
+## Sesión 10 — Técnicas avanzadas de recuperación
+
+### Configuración recomendada
+
+**Configuración B: Búsqueda híbrida sin reranking** (vectorial + léxica + RRF).
+
+Esta configuración achieves **58.33% de precisión** con una **latencia promedio de 11.8ms**, lo que la convierte en la opción más eficiente para este caso de uso. La búsqueda híbrida combina la recuperación semántica (embeddings) con la recuperación por palabras clave (full-text search), fusionando ambos rankings mediante Reciprocal Rank Fusion (RRF).
+
+### ¿Por qué no usar reranking?
+
+El reranking con cross-encoder **no justifica su latencia** en este proyecto por tres razones:
+
+1. **No mejora la precisión**: Las configuraciones con reranking (C y D) obtienen **53.33% de precisión**, 5 puntos porcentuales menos que las configuraciones sin reranking. El cross-encoder no aporta valor discriminativo adicional cuando los candidatos ya están bien ordenados por la fase de recall.
+
+2. **Latencia prohibitiva**: El reranking añade entre **50x y 500x de latencia** (606ms-5s vs 11.8ms). En una aplicación interactiva donde el usuario espera respuestas en tiempo real, esta penalización es inaceptable sin una ganancia compensatoria en precisión.
+
+3. **Dataset pequeño**: Con solo 17 presupuestos y 60 chunks, el recall ya es suficientemente selectivo. El reranking brilla cuando hay cientos de candidatos marginales que requieren reordenación fina, pero ese no es el caso aquí.
+
+### ¿Cuándo sí usar reranking?
+
+El reranking sería recomendable si:
+- El corpus creciera a **100+ presupuestos** con mayor variabilidad semántica
+- Las queries fueran **ambiguas o genéricas** (ej: "quiero una app") donde múltiples presupuestos compiten por relevancia
+- La **preción fuera crítica** y la latencia secundaria (ej: generación de informes batch)
+
+### Conclusión
+
+La lección clave de este ejercicio es que **más técnicas ≠ mejores resultados**. La configuración más simple (híbrida sin reranking) ofrece el mejor balance precisión/latencia. El reranking es una herramienta poderosa, pero su valor depende del contexto: en datasets pequeños con queries específicas, añade complejidad y latencia sin mejorar la calidad de la recuperación.
