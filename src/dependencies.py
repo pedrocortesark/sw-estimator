@@ -64,6 +64,18 @@ def get_chunk_store():
 
 
 @lru_cache
+def get_generation_chunk_store():
+    """Stateless async data-access layer for the generation pipeline (Session 9/10).
+
+    This is the ChunkStore with search_filtered() and search_lexical() methods
+    needed by the hybrid retrieval pipeline.
+    """
+    from src.generation.rag.store.repository import ChunkStore
+
+    return ChunkStore()
+
+
+@lru_cache
 def get_rag_ingest_service():
     """Chunk → embed → persist orchestration. ``None`` without an OpenAI key;
     the router maps that to a 500."""
@@ -97,6 +109,18 @@ def get_semantic_retriever():
         session_factory=get_async_session_factory(),
         store=get_chunk_store(),
     )
+
+
+# --- Session 10: cross-encoder reranking ------------------------------------
+
+
+@lru_cache
+def get_reranker():
+    """Cross-encoder reranker singleton (Session 10). The model loads lazily on
+    the first rerank, so building this is cheap and import-time has no torch cost."""
+    from src.generation.rag.retrieval.reranker import CrossEncoderReranker
+
+    return CrossEncoderReranker.from_settings()
 
 
 def _make_semantic_cache():
