@@ -10,8 +10,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
 
 from src.dependencies import get_rag_ingest_service
-from src.rag.ingest_service import DuplicateDocumentError, RagIngestService
-from src.rag.schemas import IngestRequest, IngestResponse
+from src.generation.rag.ingest_service import DuplicateDocumentError, RagIngestService
+from src.generation.rag.schemas import IngestRequest, IngestResponse
 
 log = structlog.get_logger()
 

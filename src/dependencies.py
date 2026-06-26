@@ -36,7 +36,7 @@ def get_openai_client():
 @lru_cache
 def get_chunker():
     """Stateless structural chunker for the embedding pipeline (Session 8)."""
-    from src.rag.chunking.structural import JSONStructuralChunker
+    from src.generation.rag.chunking.structural import JSONStructuralChunker
 
     return JSONStructuralChunker()
 
@@ -44,7 +44,7 @@ def get_chunker():
 @lru_cache
 def get_embedder():
     """OpenAI embedder. ``None`` when no API key is configured."""
-    from src.rag.embedding.embedder import OpenAIEmbedder
+    from src.generation.rag.embedding.embedder import OpenAIEmbedder
 
     client = get_openai_client()
     if client is None:
@@ -58,18 +58,6 @@ def get_embedder():
 @lru_cache
 def get_chunk_store():
     """Stateless async data-access layer over documents/chunks."""
-    from src.rag.store.repository import ChunkStore
-
-    return ChunkStore()
-
-
-@lru_cache
-def get_generation_chunk_store():
-    """Stateless async data-access layer for the generation pipeline (Session 9/10).
-
-    This is the ChunkStore with search_filtered() and search_lexical() methods
-    needed by the hybrid retrieval pipeline.
-    """
     from src.generation.rag.store.repository import ChunkStore
 
     return ChunkStore()
@@ -79,7 +67,7 @@ def get_generation_chunk_store():
 def get_rag_ingest_service():
     """Chunk → embed → persist orchestration. ``None`` without an OpenAI key;
     the router maps that to a 500."""
-    from src.rag.ingest_service import RagIngestService
+    from src.generation.rag.ingest_service import RagIngestService
 
     from src.persistence.database import get_async_session_factory
 
@@ -97,7 +85,7 @@ def get_rag_ingest_service():
 @lru_cache
 def get_semantic_retriever():
     """Query-side counterpart of the ingest service. Same ``None`` contract."""
-    from src.rag.retriever import SemanticRetriever
+    from src.generation.rag.retriever import SemanticRetriever
 
     from src.persistence.database import get_async_session_factory
 

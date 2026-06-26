@@ -18,7 +18,7 @@ from uuid import uuid4
 
 import structlog
 
-from src.config import get_settings
+from src.core.config import get_settings
 from src.generation.rag.context_assembler import build_context_block, truncate_to_token_budget
 from src.generation.rag.errors import GenerationError, MalformedEstimateError
 from src.generation.rag.observability import log_stage

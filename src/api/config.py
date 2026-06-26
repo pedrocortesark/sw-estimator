@@ -12,14 +12,14 @@ import structlog
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from src.config import Settings, get_settings
+from src.core.config import Settings, get_settings
 from src.dependencies import get_runtime_config
 from src.llm.runtime_config import (
     MODEL_KEYS,
     RuntimeConfigUnavailable,
     RuntimeModelConfig,
 )
-from src.llm.wrapper import _provider_from_model
+from src.services.llm_wrapper import _provider_from_model
 
 log = structlog.get_logger()
 

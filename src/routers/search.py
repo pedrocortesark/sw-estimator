@@ -10,8 +10,8 @@ import structlog
 from fastapi import APIRouter, Depends, HTTPException
 
 from src.dependencies import get_semantic_retriever
-from src.rag.retriever import SemanticRetriever
-from src.rag.schemas import SearchRequest, SearchResponse
+from src.generation.rag.retriever import SemanticRetriever
+from src.generation.rag.schemas import SearchRequest, SearchResponse
 
 log = structlog.get_logger()
 

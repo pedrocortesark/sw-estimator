@@ -32,7 +32,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from src.api.deps import get_request_id
 from src.api.rate_limiting import limiter
 from src.api.security import require_estimate_key
-from src.config import get_settings
+from src.core.config import get_settings
 from src.dependencies import get_embedder, get_token_encoder
 from src.generation.rag.context_assembler import build_context_block, truncate_to_token_budget
 from src.generation.rag.errors import RagError, RetrievalError

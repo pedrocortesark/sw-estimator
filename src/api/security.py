@@ -12,7 +12,7 @@ import secrets
 
 from fastapi import Header, HTTPException, status
 
-from src.config import get_settings
+from src.core.config import get_settings
 
 _API_KEY_HEADER = "X-API-Key"
 

@@ -17,7 +17,7 @@ import asyncio
 
 import structlog
 
-from src.config import get_settings
+from src.core.config import get_settings
 from src.generation.rag.errors import ReformulationError
 from src.generation.rag.schemas import EstimationQuery
 

@@ -47,7 +47,7 @@ from src.domain.schemas.estimation import (
 from src.generation.agentic.boss import Boss
 from src.generation.cag.exact import EstimationCache
 from src.generation.agentic.critic import Critic
-from src.llm.wrapper import LLMWrapper
+from src.services.llm_wrapper import LLMWrapper
 from src.generation.conversation.compression import apply_compression
 from src.generation.conversation.metadata_extractor import update_metadata
 from src.generation.conversation.models import Session

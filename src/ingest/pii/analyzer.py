@@ -16,7 +16,7 @@ from functools import lru_cache
 from presidio_analyzer import AnalyzerEngine
 from presidio_analyzer.nlp_engine import NlpEngineProvider
 
-from src.config import get_settings
+from src.core.config import get_settings
 from src.ingest.pii.recognizers import (
     BudgetIdRecognizer,
     ClientCodeRecognizer,

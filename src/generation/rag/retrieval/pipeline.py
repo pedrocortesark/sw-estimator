@@ -76,11 +76,11 @@ async def retrieve(
     retrieved at all — the orchestrator then short-circuits to an
     insufficient-context estimate instead of grounding on noise.
     """
-    from src.dependencies import get_generation_chunk_store
+    from src.dependencies import get_chunk_store
     from src.persistence.database import get_async_session_factory
 
     session_factory = get_async_session_factory()
-    store = get_generation_chunk_store()
+    store = get_chunk_store()
     started = time.perf_counter()
 
     # Recall wide whenever a later stage (fusion or rerank) will re-sort; recall

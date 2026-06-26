@@ -17,7 +17,7 @@ import structlog
 
 from src.prompts.loader import render_metadata_extraction_prompt
 from src.domain.schemas.estimation import EstimationResult
-from src.llm.wrapper import LLMWrapper
+from src.services.llm_wrapper import LLMWrapper
 from src.generation.conversation.models import ProjectMetadata
 
 log = structlog.get_logger()

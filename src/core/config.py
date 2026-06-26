@@ -77,6 +77,28 @@ class Settings(BaseSettings):
     reranker_enabled: bool = False
     reranker_model: str = "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"
 
+    # --- Session 9/10 — generation and retrieval settings ---
+    # Embedding model for vector search
+    embedding_model: str = "text-embedding-3-small"
+    # Available models for LLM calls
+    available_models: list[str] = [
+        "gpt-4o-mini",
+        "claude-haiku-4-5-20251001",
+    ]
+    # Generation settings
+    generation_model: str = "gpt-4o-mini"
+    generation_max_tokens: int = 4096
+    generation_reasoning_effort: str = "medium"
+    # Reformulation model for query understanding
+    reformulation_model: str = "gpt-4o-mini"
+    # Retrieval settings
+    retrieval_top_k: int = 10
+    retrieval_distance_threshold: float = 0.6
+    # Context assembly
+    max_context_tokens: int = 8000
+    # PII/Presidio
+    presidio_spacy_model: str = "es_core_news_md"
+
 
 @lru_cache
 def get_settings() -> Settings:
