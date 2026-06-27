@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 # Closed universe of client sectors present in the sample dataset. Kept as a
 # Literal so a typo or an unexpected sector fails validation loudly instead of
@@ -209,7 +209,13 @@ class RetrievalResult(BaseModel):
 class SourceCitation(BaseModel):
     """A reference from the estimate back to a retrieved chunk."""
 
-    source_id: int = Field(description="DB id of the cited chunk (a RetrievedChunk.id).")
+    chunk_id: int = Field(description="DB id of the retrieved chunk.")
+    document_id: str | None = Field(
+        default=None, description="budget_id of the parent document."
+    )
+    evidence: str = Field(
+        description="Verbatim span or figure from the source backing this task."
+    )
     relevance: Relevance
     used_for: str = Field(description="What this source contributed to the estimate.")
 
@@ -235,9 +241,23 @@ class TaskItem(BaseModel):
         default=None, description="One-line scope of the task."
     )
     engineer_days: int = Field(ge=0)
-    sources: list[int] = Field(
-        default_factory=list, description="Chunk ids that back this task."
+    grounded: bool = Field(
+        default=True,
+        description="False when no source supports this task.",
     )
+    sources: list[SourceCitation] = Field(
+        default_factory=list,
+        description="Source citations backing this task. Non-empty iff grounded=True.",
+    )
+
+    @model_validator(mode="after")
+    def check_grounded_consistency(self) -> "TaskItem":
+        """Enforce grounded/sources consistency."""
+        if self.grounded and not self.sources:
+            raise ValueError("grounded=True requires at least one source citation.")
+        if not self.grounded and self.sources:
+            raise ValueError("grounded=False must have empty sources list.")
+        return self
 
 
 class WorkModule(BaseModel):
@@ -270,6 +290,38 @@ class Estimate(BaseModel):
     confidence: Confidence
     reasoning: str = Field(description="How the estimate was derived from the sources.")
     insufficient_context_explanation: str | None = None
+
+
+# ---------------------------------------------------------------------------
+# Session 11 — per-line citation verification.
+#
+# After generation, every task's cited chunk_ids are checked against the set
+# of retrieved chunk ids. A dangling citation (chunk_id not in the retrieved
+# context) is a quality failure, not a cosmetic detail.
+# ---------------------------------------------------------------------------
+
+
+class CitationLineStatus(BaseModel):
+    """Verification status for one task line."""
+
+    module_name: str
+    task_name: str
+    grounded: bool
+    cited_chunk_ids: list[int]
+    valid_chunk_ids: list[int]
+    fabricated_chunk_ids: list[int]
+    status: Literal["grounded", "dangling_citation", "ungrounded"]
+
+
+class CitationReport(BaseModel):
+    """Aggregate citation verification report for an estimate."""
+
+    total_lines: int
+    grounded_lines: int
+    dangling_citation_lines: int
+    ungrounded_lines: int
+    lines: list[CitationLineStatus]
+    all_valid: bool = Field(description="True if no dangling citations exist.")
 
 
 # ---- HTTP request models for the Session 9 routers ------------------------
@@ -376,6 +428,10 @@ class GenerateResult(BaseModel):
     fabricated_source_ids: list[int] = Field(
         default_factory=list,
         description="Cited source ids not present in kept_chunks (empty = clean).",
+    )
+    citation_report: CitationReport | None = Field(
+        default=None,
+        description="Per-line citation verification report.",
     )
     coherent: bool = Field(description="False when an insufficient estimate still carries numbers.")
 

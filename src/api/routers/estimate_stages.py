@@ -50,7 +50,7 @@ from src.generation.rag.schemas import (
     RetrievalRequest,
     RetrievalResult,
 )
-from src.generation.rag.validation import check_coherence, validate_citations
+from src.generation.rag.validation import check_coherence, validate_citations, verify_citations
 
 log = structlog.get_logger()
 
@@ -161,10 +161,12 @@ async def generate(request: Request, payload: GenerateRequest) -> GenerateResult
         log.error("stage_failed", stage="generation", error_type=type(exc).__name__)
         raise HTTPException(status_code=502, detail="Estimate generation failed.") from exc
 
-    fabricated = validate_citations(estimate, payload.kept_chunks)
+    report = verify_citations(estimate, payload.kept_chunks)
+    log.info("citation_report", request_id=request_id, **report.model_dump())
     coherent = check_coherence(estimate)
     return GenerateResult(
         estimate=estimate,
-        fabricated_source_ids=fabricated,
+        fabricated_source_ids=[cid for line in report.lines for cid in line.fabricated_chunk_ids],
+        citation_report=report,
         coherent=coherent,
     )

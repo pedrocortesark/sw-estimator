@@ -14,10 +14,10 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from src.rag.embedding.embedder import OpenAIEmbedder
-from src.rag.ingest_service import DuplicateDocumentError, RagIngestService
-from src.rag.schemas import Budget, BudgetComponent, Chunk, ClientMetadata, EmbeddedChunk
-from src.rag.store.repository import ChunkStore
+from src.generation.rag.embedding.embedder import OpenAIEmbedder
+from src.generation.rag.ingest_service import DuplicateDocumentError, RagIngestService
+from src.generation.rag.schemas import Budget, BudgetComponent, Chunk, ClientMetadata, EmbeddedChunk
+from src.generation.rag.store.repository import ChunkStore
 
 
 # ---------------------------------------------------------------------------

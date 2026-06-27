@@ -20,8 +20,8 @@ from unittest.mock import AsyncMock, MagicMock, call
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.rag.schemas import EmbeddedChunk
-from src.rag.store.repository import BUDGET_COMPONENT, ChunkStore
+from src.generation.rag.schemas import EmbeddedChunk
+from src.generation.rag.store.repository import BUDGET_COMPONENT, ChunkStore
 
 
 # ---------------------------------------------------------------------------

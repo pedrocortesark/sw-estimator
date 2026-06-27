@@ -26,7 +26,7 @@ from src.generation.rag.prompt_builder import build_system_prompt, build_user_me
 from src.generation.rag.query_reformulator import compose_search_text, reformulate_query
 from src.generation.rag.retriever import search_chunks
 from src.generation.rag.schemas import Estimate, EstimationQuery
-from src.generation.rag.validation import check_coherence, validate_citations
+from src.generation.rag.validation import check_coherence, validate_citations, verify_citations
 
 log = structlog.get_logger()
 
@@ -197,17 +197,23 @@ async def estimate_from_transcript(
     with log_stage("generation", request_id, sources=len(kept)):
         estimate = await generate_estimate(context_block, structured_query=query)
 
-    # 6. Validate citations; one corrective retry on fabricated ids.
-    fabricated = validate_citations(estimate, kept)
-    if fabricated:
+    # 6. Verify citations; one corrective retry on dangling ids.
+    report = verify_citations(estimate, kept)
+    log.info("citation_report", request_id=request_id, **report.model_dump())
+
+    if not report.all_valid:
+        fabricated = [cid for line in report.lines for cid in line.fabricated_chunk_ids]
         feedback = (
             f"your previous response cited invalid source ids: {fabricated}. "
-            "Only cite ids that appear in the <sources> block."
+            "Only cite ids that appear in the <sources> block. "
+            "For each task, include the verbatim evidence from the source."
         )
         with log_stage("citation_retry", request_id, fabricated=fabricated):
             estimate = await _generate(context_block, query, feedback=feedback)
-        if validate_citations(estimate, kept):
-            log.warning("citations_unrepaired", request_id=request_id)
+        report = verify_citations(estimate, kept)
+        log.info("citation_report_after_retry", request_id=request_id, **report.model_dump())
+        if not report.all_valid:
+            log.warning("citations_unrepaired", request_id=request_id, report=report.model_dump())
             estimate = estimate.model_copy(update={"confidence": "low"})
 
     # 7. Coherence guard: one repair attempt, then reject.

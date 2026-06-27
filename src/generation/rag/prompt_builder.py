@@ -1,9 +1,10 @@
-"""Prompt construction for grounded estimate generation (Session 9).
+"""Prompt construction for grounded estimate generation (Session 9 + 11).
 
-The system prompt encodes the grounding policy: every quantitative claim must
-trace back to a ``<source>`` block, fabricated ids are forbidden, and when the
-context cannot support an estimate the model must say so via
-``confidence="insufficient"`` rather than guess.
+The system prompt encodes the grounding policy: every task must cite the
+specific chunk_id(s) it derives from, include verbatim evidence from the source,
+and set grounded=False when no source supports the task. Fabricated ids are
+forbidden, and when the context cannot support an estimate the model must say
+so via ``confidence="insufficient"`` rather than guess.
 """
 
 from __future__ import annotations
@@ -33,16 +34,24 @@ def build_system_prompt() -> str:
         "of tasks; decompose it into the finer tasks a delivery team would actually "
         "plan, distributing its engineer-days across them.\n"
         "\n"
-        "Rules:\n"
+        "CITATION RULES (critical):\n"
         "1. Base every estimate ONLY on the <source> blocks provided. Do not rely on "
         "outside knowledge for the numbers.\n"
-        "2. Cite the source id(s) a task derives from in that task's `sources` (the "
-        "`id` attribute of the <source> element). A task refined from a historical "
-        "component should cite that component.\n"
-        "3. Never invent source ids. Genuinely novel scope with no historical analog "
-        "must be expressed as an Assumption (not as a task citing a non-existent id).\n"
-        "4. Clearly distinguish evidence-backed tasks (with sources) from assumptions "
-        "(without sources).\n"
+        "2. For each task, fill the `sources` array with one or more SourceCitation "
+        "objects. Each SourceCitation must include:\n"
+        "   - `chunk_id`: the `id` attribute of the <source> element you are citing\n"
+        "   - `document_id`: the `budget_id` attribute of the same <source> element\n"
+        "   - `evidence`: a VERBATIM span or figure from that source that directly "
+        "supports the task (copy the exact text, do not paraphrase)\n"
+        "   - `relevance`: 'primary' if the source is the main basis, 'supporting' "
+        "if it provides additional context, 'tangential' if loosely related\n"
+        "   - `used_for`: a brief description of what this source contributed\n"
+        "3. Set `grounded=true` ONLY when at least one source directly supports the "
+        "task with verbatim evidence. Set `grounded=false` when no source supports "
+        "the task (leave `sources` empty in that case).\n"
+        "4. NEVER invent chunk_ids. If you cannot find a source that directly supports "
+        "a task, set `grounded=false` and move that scope to the `assumptions` array "
+        "instead of fabricating a citation.\n"
         "5. total_engineer_days must equal the sum of all tasks across all modules.\n"
         "6. If the provided context is insufficient to estimate responsibly, set "
         'confidence="insufficient", leave total_engineer_days and duration_weeks '
@@ -75,6 +84,7 @@ def build_user_message(context_block: str, structured_query: EstimationQuery) ->
         f"{context_block}\n"
         "</sources>\n"
         "\n"
-        "Produce the grounded estimate now, citing source ids for every "
-        "quantitative claim."
+        "Produce the grounded estimate now. For each task, cite the chunk_id and "
+        "budget_id from the <source> element, and include verbatim evidence from "
+        "that source. Set grounded=false for tasks with no source support."
     )

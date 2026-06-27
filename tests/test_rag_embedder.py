@@ -12,13 +12,13 @@ from unittest.mock import MagicMock, patch
 import pytest
 from openai import OpenAI, RateLimitError
 
-from src.rag.embedding.embedder import (
+from src.generation.rag.embedding.embedder import (
     BATCH_SIZE,
     MODEL,
     OpenAIEmbedder,
     estimated_cost_usd,
 )
-from src.rag.schemas import Chunk
+from src.generation.rag.schemas import Chunk
 
 
 # ---------------------------------------------------------------------------
@@ -181,7 +181,7 @@ def test_rate_limit_triggers_retry_and_succeeds() -> None:
     ]
 
     # Patch sleep to avoid waiting the real 1+2+4 seconds.
-    with patch("src.rag.embedding.embedder.time.sleep") as mock_sleep:
+    with patch("src.generation.rag.embedding.embedder.time.sleep") as mock_sleep:
         vector = OpenAIEmbedder(client=client).embed_one("text")
 
     assert vector == [0.1, 0.2]
@@ -201,7 +201,7 @@ def test_rate_limit_exhausts_retries_raises() -> None:
         "still rate limited", response=MagicMock(), body=None
     )
 
-    with patch("src.rag.embedding.embedder.time.sleep"):
+    with patch("src.generation.rag.embedding.embedder.time.sleep"):
         with pytest.raises(RateLimitError):
             OpenAIEmbedder(client=client).embed_one("text")
 
