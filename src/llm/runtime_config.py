@@ -18,7 +18,7 @@ from __future__ import annotations
 import redis
 import structlog
 
-from app.config import Settings
+from src.core.config import Settings
 
 log = structlog.get_logger()
 
@@ -111,3 +111,107 @@ class RuntimeModelConfig:
     def _validate_key(key: str) -> None:
         if key not in MODEL_KEYS:
             raise ValueError(f"Unknown model key: {key}")
+
+
+# ---------------------------------------------------------------------------
+# Session 10 — retrieval toggles (search mode + reranking)
+# ---------------------------------------------------------------------------
+
+RETRIEVAL_HASH_KEY = "estimator:retrieval_config"
+
+RETRIEVAL_KEYS: tuple[str, ...] = (
+    "SEARCH_MODE",
+    "RERANK",
+)
+
+
+class RuntimeRetrievalConfig:
+    """Redis-hash-backed override store for the Session 10 retrieval toggles.
+
+    Reads degrade to the settings default if Redis is down (the pipeline keeps
+    serving exactly as .env configured it); writes re-raise so a failed override
+    is visible to the API (mapped to 503), matching :class:`RuntimeModelConfig`.
+    """
+
+    def __init__(self, redis_client: redis.Redis, settings: Settings) -> None:
+        self._redis = redis_client
+        self._settings = settings
+
+    @classmethod
+    def from_url(cls, url: str, settings: Settings) -> "RuntimeRetrievalConfig":
+        return cls(redis.from_url(url, decode_responses=True), settings)
+
+    def _get_raw(self, key: str) -> str | None:
+        try:
+            return self._redis.hget(RETRIEVAL_HASH_KEY, key)
+        except redis.RedisError as exc:
+            log.warning("runtime_retrieval_read_failed", key=key, error=str(exc)[:200])
+            return None
+
+    def _set_raw(self, key: str, value: str | None) -> None:
+        try:
+            if value is None:
+                self._redis.hdel(RETRIEVAL_HASH_KEY, key)
+            else:
+                self._redis.hset(RETRIEVAL_HASH_KEY, key, value)
+        except redis.RedisError as exc:
+            raise RuntimeConfigUnavailable(str(exc)) from exc
+
+    def get_search_mode(self) -> str | None:
+        """Override for search_mode ('vector' or 'hybrid'), or None if unset."""
+        return self._get_raw("SEARCH_MODE")
+
+    def set_search_mode(self, value: str | None) -> None:
+        """Set the search_mode override; None clears it."""
+        if value is not None and value not in ("vector", "hybrid"):
+            raise ValueError(f"Invalid search_mode: {value}")
+        self._set_raw("SEARCH_MODE", value)
+
+    def get_rerank(self) -> bool | None:
+        """Override for rerank (True/False), or None if unset."""
+        raw = self._get_raw("RERANK")
+        if raw is None:
+            return None
+        return raw.lower() == "true"
+
+    def set_rerank(self, value: bool | None) -> None:
+        """Set the rerank override; None clears it."""
+        self._set_raw("RERANK", "true" if value else "false" if value is not None else None)
+
+    def effective_search_mode(self) -> str:
+        """The search_mode the pipeline should use: override if set, else the default."""
+        return self.get_search_mode() or getattr(self._settings, "search_mode", "vector")
+
+    def effective_rerank(self) -> bool:
+        """The rerank value the pipeline should use: override if set, else the default."""
+        override = self.get_rerank()
+        if override is not None:
+            return override
+        return getattr(self._settings, "reranker_enabled", False)
+
+    def snapshot(self) -> dict[str, dict[str, str | bool]]:
+        """One entry per retrieval key: {effective, default, overridden}."""
+        try:
+            overrides = self._redis.hgetall(RETRIEVAL_HASH_KEY)
+        except redis.RedisError as exc:
+            log.warning("runtime_retrieval_read_failed", key="*", error=str(exc)[:200])
+            overrides = {}
+        return {
+            "search_mode": {
+                "effective": self.effective_search_mode(),
+                "default": getattr(self._settings, "search_mode", "vector"),
+                "overridden": "SEARCH_MODE" in overrides,
+            },
+            "rerank": {
+                "effective": self.effective_rerank(),
+                "default": getattr(self._settings, "reranker_enabled", False),
+                "overridden": "RERANK" in overrides,
+            },
+        }
+
+    def reset_all(self) -> None:
+        """Drop every override (back to .env defaults)."""
+        try:
+            self._redis.delete(RETRIEVAL_HASH_KEY)
+        except redis.RedisError as exc:
+            raise RuntimeConfigUnavailable(str(exc)) from exc

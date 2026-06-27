@@ -111,6 +111,18 @@ def get_reranker():
     return CrossEncoderReranker.from_settings()
 
 
+@lru_cache
+def get_runtime_retrieval_config():
+    """Redis-backed override store for the Session 10 retrieval toggles
+    (search mode + reranking), read per call so a flip in the Ajustes UI takes
+    effect on the next retrieval without a restart."""
+    from src.core.config import get_settings
+    from src.llm.runtime_config import RuntimeRetrievalConfig
+
+    settings = get_settings()
+    return RuntimeRetrievalConfig.from_url(settings.redis_url, settings)
+
+
 def _make_semantic_cache():
     """Try to create a Redis-backed ``EstimationSemanticCache``.
 

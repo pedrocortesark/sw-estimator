@@ -40,6 +40,8 @@ dependencies = [
     "tiktoken>=0.7.0",
     # Session 10 — cross-encoder reranking (recall-then-rerank). Pulls torch.
     "sentence-transformers>=3.0",
+    # Session 10 — rate limiting for API endpoints
+    "slowapi>=0.1.9",
 ]
 
 [tool.uv]
