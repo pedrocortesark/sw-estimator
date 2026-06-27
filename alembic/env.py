@@ -17,7 +17,7 @@ from sqlalchemy.dialects.postgresql.base import ischema_names
 
 from src.core.config import get_settings
 from src.persistence.models import Base  # noqa: F401 — ensure Base is registered
-import src.rag.store.models  # noqa: F401 — register S8 tables on Base.metadata
+import src.generation.rag.store.models  # noqa: F401 — register S8 tables on Base.metadata
 
 config = context.config
 

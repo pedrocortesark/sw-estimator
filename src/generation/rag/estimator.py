@@ -79,17 +79,11 @@ async def _generate(
         user_message += f"\n\n<correction>\n{feedback}\n</correction>"
 
     try:
-        estimate, _meta = await asyncio.to_thread(
-            wrapper.complete_structured,
+        estimate, _meta = await wrapper.complete_structured(
             system_prompt=build_system_prompt(),
             user_message=user_message,
             response_model=Estimate,
-            model_override=settings.GENERATION_MODEL,
-            reasoning_effort=settings.GENERATION_REASONING_EFFORT,
-            # gpt-5 reasoning tokens count against max_tokens; the 4000 default
-            # is exhausted by reasoning alone and truncates the JSON. See
-            # Settings.GENERATION_MAX_TOKENS.
-            max_tokens=settings.GENERATION_MAX_TOKENS,
+            model_override=settings.generation_model,
         )
         return estimate
     except Exception as exc:  # noqa: BLE001

@@ -1,0 +1,35 @@
+{
+  "metrics": {
+    "faithfulness": 0.2899747474747475,
+    "answer_relevancy": 0.16984758884478215,
+    "context_precision": 0.9703174603009395,
+    "context_recall": 0.4288461538461538
+  },
+  "per_query": [
+    {
+      "question": "We need a mobile banking application with secure OAuth 2.0 authentication, PSD2 compliance for open ",
+      "answer": "Total engineer-days: 600\nConfidence: high\n\nModules:\n  - Authentication & Access\n    Implementation of secure authentication and access management for the mobile banking application.\n    \u2022 OAuth 2.0 au",
+      "num_contexts": 10
+    },
+    {
+      "question": "Building an online store with a product catalog, shopping cart, and checkout flow. Need payment inte",
+      "answer": "Confidence: high\n\nModules:\n  - Product Catalog\n    Managing the product catalog and its features.\n    \u2022 Develop Product Catalog API: 150 days\n      Sources: 16\n  - Cart and Checkout\n    Implement shop",
+      "num_contexts": 10
+    },
+    {
+      "question": "Healthcare platform for patient appointments and telemedicine. Need video consultation capabilities,",
+      "answer": "Total engineer-days: 500\nConfidence: medium\n\nModules:\n  - Telemedicine & Video Consultation\n    Implementation of telemedicine features, including video consultations and related functionalities.\n    ",
+      "num_contexts": 10
+    },
+    {
+      "question": "Factory monitoring system that collects sensor data from machines via MQTT, detects anomalies using ",
+      "answer": "Total engineer-days: 380\nConfidence: medium\n\nModules:\n  - SCADA Integration\n    Integrate predictive alerts into existing SCADA dashboards for operator visibility.\n    \u2022 Develop SCADA read-only integr",
+      "num_contexts": 10
+    },
+    {
+      "question": "Payment processing system for merchants with real-time transaction processing, fraud detection using",
+      "answer": "Total engineer-days: 1000\nConfidence: medium\n\nModules:\n  - Core Domain\n    Core functionality required for payment processing and fraud detection.\n    \u2022 Payment Gateway Core: 220 days\n      Sources: 9",
+      "num_contexts": 10
+    }
+  ]
+}
