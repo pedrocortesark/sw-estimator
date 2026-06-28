@@ -264,23 +264,48 @@ async def evaluate_with_ragas():
     # Convert to pandas DataFrame to extract metrics
     df = result.to_pandas()
     
-    # Calculate mean for each metric
-    metrics = {}
-    for col in df.columns:
-        if col not in ['user_input', 'response', 'retrieved_contexts', 'reference']:
-            try:
-                metrics[col] = df[col].mean()
-                print(f"{col}: {metrics[col]:.4f}")
-            except (TypeError, ValueError):
-                pass
+    # Print per-query metrics table
+    metric_cols = [col for col in df.columns if col not in ['user_input', 'response', 'retrieved_contexts', 'reference']]
+    
+    print("Per-query metrics:")
+    print(f"{'Query':<6} {'Faithfulness':<14} {'Answer Rel.':<14} {'Ctx Precision':<14} {'Ctx Recall':<14}")
+    print("-" * 70)
+    
+    per_query_metrics = []
+    for idx, row in df.iterrows():
+        query_id = f"Q{idx + 1}"
+        metrics_row = {"query_id": query_id}
+        for col in metric_cols:
+            val = row[col]
+            metrics_row[col] = float(val) if val is not None and not (isinstance(val, float) and (val != val)) else None
+        per_query_metrics.append(metrics_row)
+        faith = metrics_row.get('faithfulness', 0) or 0
+        ans_rel = metrics_row.get('answer_relevancy', 0) or 0
+        ctx_prec = metrics_row.get('context_precision', 0) or 0
+        ctx_rec = metrics_row.get('context_recall', 0) or 0
+        print(f"{query_id:<6} {faith:<14.4f} {ans_rel:<14.4f} {ctx_prec:<14.4f} {ctx_rec:<14.4f}")
+    
+    # Calculate and print averages
+    print("-" * 70)
+    averages = {}
+    for col in metric_cols:
+        vals = [m[col] for m in per_query_metrics if m[col] is not None]
+        averages[col] = sum(vals) / len(vals) if vals else 0
+    
+    avg_faith = averages.get('faithfulness', 0)
+    avg_ans_rel = averages.get('answer_relevancy', 0)
+    avg_ctx_prec = averages.get('context_precision', 0)
+    avg_ctx_rec = averages.get('context_recall', 0)
+    print(f"{'AVG':<6} {avg_faith:<14.4f} {avg_ans_rel:<14.4f} {avg_ctx_prec:<14.4f} {avg_ctx_rec:<14.4f}")
     
     # Save detailed results
     output_path = Path(__file__).parent / "ragas_evaluation_results.json"
     with open(output_path, "w") as f:
         json.dump(
             {
-                "metrics": metrics,
-                "per_query": [
+                "metrics": averages,
+                "per_query": per_query_metrics,
+                "per_query_details": [
                     {
                         "question": sample.user_input[:100],
                         "answer": sample.response[:200],
@@ -295,7 +320,7 @@ async def evaluate_with_ragas():
     
     print(f"\n✓ Detailed results saved to {output_path}")
     
-    return result
+    return averages
 
 
 if __name__ == "__main__":

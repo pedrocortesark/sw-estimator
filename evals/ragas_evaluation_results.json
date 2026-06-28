@@ -1,34 +1,71 @@
 {
   "metrics": {
-    "faithfulness": 0.2899747474747475,
-    "answer_relevancy": 0.16984758884478215,
-    "context_precision": 0.9703174603009395,
-    "context_recall": 0.4288461538461538
+    "faithfulness": 0.3934876717485413,
+    "answer_relevancy": 0.33430996012393244,
+    "context_precision": 0.9710229276730529,
+    "context_recall": 0.41619263089851327
   },
   "per_query": [
     {
+      "query_id": "Q1",
+      "faithfulness": 0.47619047619047616,
+      "answer_relevancy": 0.4994161703379359,
+      "context_precision": 0.9749999999878125,
+      "context_recall": 0.7857142857142857
+    },
+    {
+      "query_id": "Q2",
+      "faithfulness": 0.2857142857142857,
+      "answer_relevancy": 0.3975911263173929,
+      "context_precision": 0.9333333333177777,
+      "context_recall": 0.0
+    },
+    {
+      "query_id": "Q3",
+      "faithfulness": 0.4782608695652174,
+      "answer_relevancy": 0.3468213767902913,
+      "context_precision": 0.9999999999888889,
+      "context_recall": 0.35294117647058826
+    },
+    {
+      "query_id": "Q4",
+      "faithfulness": 0.7272727272727273,
+      "answer_relevancy": 0.0,
+      "context_precision": 0.9999999999666667,
+      "context_recall": 0.6923076923076923
+    },
+    {
+      "query_id": "Q5",
+      "faithfulness": 0.0,
+      "answer_relevancy": 0.42772112717404215,
+      "context_precision": 0.9467813051041186,
+      "context_recall": 0.25
+    }
+  ],
+  "per_query_details": [
+    {
       "question": "We need a mobile banking application with secure OAuth 2.0 authentication, PSD2 compliance for open ",
-      "answer": "Total engineer-days: 600\nConfidence: high\n\nModules:\n  - Authentication & Access\n    Implementation of secure authentication and access management for the mobile banking application.\n    \u2022 OAuth 2.0 au",
+      "answer": "Total engineer-days: 0\nConfidence: high\n\nModules:\n  - Authentication & Access\n    Implementation of OAuth 2.0 authentication system for secure user access.\n    \u2022 OAuth 2.0 authentication backend: 120 ",
       "num_contexts": 10
     },
     {
       "question": "Building an online store with a product catalog, shopping cart, and checkout flow. Need payment inte",
-      "answer": "Confidence: high\n\nModules:\n  - Product Catalog\n    Managing the product catalog and its features.\n    \u2022 Develop Product Catalog API: 150 days\n      Sources: 16\n  - Cart and Checkout\n    Implement shop",
+      "answer": "Total engineer-days: 630\nConfidence: medium\n\nModules:\n  - Cart & Checkout\n    Management of shopping cart functionality and checkout process integration.\n    \u2022 Develop Cart Service: 140 days\n      Sou",
       "num_contexts": 10
     },
     {
       "question": "Healthcare platform for patient appointments and telemedicine. Need video consultation capabilities,",
-      "answer": "Total engineer-days: 500\nConfidence: medium\n\nModules:\n  - Telemedicine & Video Consultation\n    Implementation of telemedicine features, including video consultations and related functionalities.\n    ",
+      "answer": "Total engineer-days: 490\nConfidence: high\n\nModules:\n  - Telemedicine\n    Implementing video consultation capabilities and associated features.\n    \u2022 WebRTC Video Consultation: 20 days\n      Sources: 3",
       "num_contexts": 10
     },
     {
       "question": "Factory monitoring system that collects sensor data from machines via MQTT, detects anomalies using ",
-      "answer": "Total engineer-days: 380\nConfidence: medium\n\nModules:\n  - SCADA Integration\n    Integrate predictive alerts into existing SCADA dashboards for operator visibility.\n    \u2022 Develop SCADA read-only integr",
+      "answer": "Total engineer-days: 670\nConfidence: medium\n\nModules:\n  - Telemetry Ingestion\n    Ingesting sensor data from machines using MQTT protocol into a time-series database.\n    \u2022 MQTT-based data ingestion: ",
       "num_contexts": 10
     },
     {
       "question": "Payment processing system for merchants with real-time transaction processing, fraud detection using",
-      "answer": "Total engineer-days: 1000\nConfidence: medium\n\nModules:\n  - Core Domain\n    Core functionality required for payment processing and fraud detection.\n    \u2022 Payment Gateway Core: 220 days\n      Sources: 9",
+      "answer": "Total engineer-days: 900\nConfidence: medium\n\nModules:\n  - Payments & Billing\n    Core functionality for processing payments, capturing transactions, and managing reconciliation workflows.\n    \u2022 Paymen",
       "num_contexts": 10
     }
   ]
