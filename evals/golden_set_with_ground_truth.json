@@ -1,0 +1,205 @@
+[
+  {
+    "query_id": "Q1",
+    "query": "We need a mobile banking application with secure OAuth 2.0 authentication, PSD2 compliance for open banking, and a transaction ledger with audit trails. The app should support real-time notifications for transactions and security events.",
+    "relevant_budgets": ["BUD-2024-001", "BUD-2024-002", "BUD-2024-003"],
+    "ground_truth": {
+      "total_engineer_days": 60,
+      "modules": [
+        {
+          "name": "Authentication & Authorization",
+          "tasks": [
+            {"name": "OAuth 2.0 backend implementation", "engineer_days": 15},
+            {"name": "JWT session management", "engineer_days": 5},
+            {"name": "Multi-tenant token isolation", "engineer_days": 3}
+          ]
+        },
+        {
+          "name": "PSD2 Compliance",
+          "tasks": [
+            {"name": "Open banking connectors", "engineer_days": 20},
+            {"name": "Strong customer authentication (SCA)", "engineer_days": 8},
+            {"name": "Consent management", "engineer_days": 5}
+          ]
+        },
+        {
+          "name": "Transaction Ledger",
+          "tasks": [
+            {"name": "Double-entry ledger service", "engineer_days": 18},
+            {"name": "Audit trail implementation", "engineer_days": 4}
+          ]
+        },
+        {
+          "name": "Notifications",
+          "tasks": [
+            {"name": "Push notifications (APNs/FCM)", "engineer_days": 5},
+            {"name": "Email notifications", "engineer_days": 3}
+          ]
+        }
+      ],
+      "confidence": "high",
+      "reasoning": "Based on BUD-2024-001 (FintechCorp mobile banking API) which has nearly identical scope: OAuth 2.0 (120h), PSD2 connectors (160h), transaction ledger (140h), and notifications (60h). Total 480h = 60 engineer-days."
+    }
+  },
+  {
+    "query_id": "Q2",
+    "query": "Building an online store with a product catalog, shopping cart, and checkout flow. Need payment integration, order management, and email notifications for receipts. Should support multiple currencies and promotional discounts.",
+    "relevant_budgets": ["BUD-2024-005", "BUD-2024-006", "BUD-2024-007", "BUD-2024-017"],
+    "ground_truth": {
+      "total_engineer_days": 58,
+      "modules": [
+        {
+          "name": "Product Catalog",
+          "tasks": [
+            {"name": "Catalog API with search", "engineer_days": 18},
+            {"name": "Multi-currency pricing", "engineer_days": 4}
+          ]
+        },
+        {
+          "name": "Cart & Checkout",
+          "tasks": [
+            {"name": "Shopping cart service", "engineer_days": 10},
+            {"name": "Checkout orchestration", "engineer_days": 8},
+            {"name": "Promotion engine", "engineer_days": 5}
+          ]
+        },
+        {
+          "name": "Payment Integration",
+          "tasks": [
+            {"name": "Payment provider integration", "engineer_days": 8},
+            {"name": "Tax calculation", "engineer_days": 3}
+          ]
+        },
+        {
+          "name": "Order Management",
+          "tasks": [
+            {"name": "Order processing workflow", "engineer_days": 6},
+            {"name": "Email receipt notifications", "engineer_days": 2}
+          ]
+        }
+      ],
+      "confidence": "high",
+      "reasoning": "Based on BUD-2024-005 (ShopSphere headless e-commerce) which covers catalog (150h), cart/checkout (140h), and storefront (60h). Total 460h = 57.5 engineer-days, rounded to 58."
+    }
+  },
+  {
+    "query_id": "Q3",
+    "query": "Healthcare platform for patient appointments and telemedicine. Need video consultation capabilities, integration with hospital EHR systems using HL7 FHIR standards, and GDPR-compliant consent management for protected health information.",
+    "relevant_budgets": ["BUD-2024-009", "BUD-2024-010", "BUD-2024-011", "BUD-2024-012"],
+    "ground_truth": {
+      "total_engineer_days": 70,
+      "modules": [
+        {
+          "name": "FHIR Integration",
+          "tasks": [
+            {"name": "HL7 FHIR R4 integration layer", "engineer_days": 24},
+            {"name": "Terminology mapping", "engineer_days": 6},
+            {"name": "EHR data synchronization", "engineer_days": 8}
+          ]
+        },
+        {
+          "name": "Appointment Scheduling",
+          "tasks": [
+            {"name": "Scheduling engine", "engineer_days": 18},
+            {"name": "Clinician availability management", "engineer_days": 4}
+          ]
+        },
+        {
+          "name": "Telemedicine Video",
+          "tasks": [
+            {"name": "WebRTC video consultation", "engineer_days": 20},
+            {"name": "Waiting room and in-call notes", "engineer_days": 6}
+          ]
+        },
+        {
+          "name": "Compliance & Security",
+          "tasks": [
+            {"name": "GDPR consent management", "engineer_days": 8},
+            {"name": "Audit trail for PHI access", "engineer_days": 4}
+          ]
+        }
+      ],
+      "confidence": "high",
+      "reasoning": "Based on BUD-2024-009 (MediTrack telemedicine platform) which has exact scope match: FHIR integration (190h), appointment scheduling (150h), video sessions (160h), and consent module (60h). Total 560h = 70 engineer-days."
+    }
+  },
+  {
+    "query_id": "Q4",
+    "query": "Factory monitoring system that collects sensor data from machines via MQTT, detects anomalies using predictive models, and integrates with existing SCADA dashboards. Need real-time telemetry ingestion and maintenance scheduling based on equipment health.",
+    "relevant_budgets": ["BUD-2024-013", "BUD-2024-014", "BUD-2024-015"],
+    "ground_truth": {
+      "total_engineer_days": 63,
+      "modules": [
+        {
+          "name": "Sensor Telemetry Ingestion",
+          "tasks": [
+            {"name": "MQTT ingestion pipeline", "engineer_days": 22},
+            {"name": "Time-series data storage", "engineer_days": 8},
+            {"name": "Edge buffering and out-of-order handling", "engineer_days": 6}
+          ]
+        },
+        {
+          "name": "Predictive Maintenance",
+          "tasks": [
+            {"name": "Anomaly detection models", "engineer_days": 25},
+            {"name": "Remaining-useful-life prediction", "engineer_days": 12},
+            {"name": "Maintenance scheduling", "engineer_days": 8}
+          ]
+        },
+        {
+          "name": "SCADA Integration",
+          "tasks": [
+            {"name": "SCADA dashboard overlay", "engineer_days": 16},
+            {"name": "Alert visualization", "engineer_days": 5}
+          ]
+        }
+      ],
+      "confidence": "high",
+      "reasoning": "Based on BUD-2024-013 (SteelWorks factory IoT) which covers telemetry ingestion (170h), predictive maintenance (200h), and SCADA integration (130h). Total 500h = 62.5 engineer-days, rounded to 63."
+    }
+  },
+  {
+    "query_id": "Q5",
+    "query": "Payment processing system for merchants with real-time transaction processing, fraud detection using machine learning, and a dashboard for tracking payments and refunds. Need reconciliation workflows and compliance with PCI DSS standards.",
+    "relevant_budgets": ["BUD-2024-003", "BUD-2024-004", "BUD-2024-016"],
+    "ground_truth": {
+      "total_engineer_days": 75,
+      "modules": [
+        {
+          "name": "Payment Gateway Core",
+          "tasks": [
+            {"name": "Transaction authorization service", "engineer_days": 28},
+            {"name": "Idempotency and retry logic", "engineer_days": 6},
+            {"name": "Acquirer adapter layer", "engineer_days": 8}
+          ]
+        },
+        {
+          "name": "Fraud Detection",
+          "tasks": [
+            {"name": "Real-time fraud scoring", "engineer_days": 25},
+            {"name": "ML model serving (<50ms latency)", "engineer_days": 12},
+            {"name": "Velocity rules engine", "engineer_days": 8}
+          ]
+        },
+        {
+          "name": "Reconciliation",
+          "tasks": [
+            {"name": "Settlement file ingestion", "engineer_days": 10},
+            {"name": "Three-way reconciliation", "engineer_days": 8},
+            {"name": "Exception handling queues", "engineer_days": 4}
+          ]
+        },
+        {
+          "name": "Merchant Dashboard",
+          "tasks": [
+            {"name": "Transaction search and tracking", "engineer_days": 6},
+            {"name": "Refund management", "engineer_days": 4},
+            {"name": "Payout tracking", "engineer_days": 3}
+          ]
+        }
+      ],
+      "confidence": "high",
+      "reasoning": "Based on BUD-2024-003 (PayBridge payments gateway) which has exact scope: gateway core (220h), fraud detection (200h), reconciliation (120h), and merchant dashboard (60h). Total 600h = 75 engineer-days."
+    }
+  }
+]

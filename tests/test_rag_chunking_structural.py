@@ -6,12 +6,12 @@ the parent-context header that the embedder sees.
 """
 from __future__ import annotations
 
-from src.rag.chunking.structural import (
+from src.generation.rag.chunking.structural import (
     JSONStructuralChunker,
     component_metadata,
     render_component_text,
 )
-from src.rag.schemas import Budget, BudgetComponent, ClientMetadata
+from src.generation.rag.schemas import Budget, BudgetComponent, ClientMetadata
 
 
 # ---------------------------------------------------------------------------

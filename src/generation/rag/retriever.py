@@ -113,7 +113,8 @@ async def search_chunks(
     RetrievalError
         If the vector store cannot be queried.
     """
-    from src.dependencies import get_async_session_factory, get_chunk_store
+    from src.dependencies import get_chunk_store
+    from src.persistence.database import get_async_session_factory
 
     session_factory = get_async_session_factory()
     store = get_chunk_store()

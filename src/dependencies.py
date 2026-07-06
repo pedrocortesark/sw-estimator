@@ -99,6 +99,31 @@ def get_semantic_retriever():
     )
 
 
+@lru_cache
+def get_token_encoder():
+    """Tiktoken encoder for token counting (cl100k_base encoding)."""
+    import tiktoken
+
+    return tiktoken.get_encoding("cl100k_base")
+
+
+@lru_cache
+def get_llm_wrapper():
+    """LLM wrapper for structured LLM calls via Instructor + LiteLLM."""
+    from src.core.config import get_settings
+    from src.services.llm_wrapper import LLMWrapper
+
+    settings = get_settings()
+    return LLMWrapper(
+        openai_api_key=settings.openai_api_key,
+        anthropic_api_key=settings.anthropic_api_key,
+        primary_model=settings.openai_model,
+        fallback_model=settings.anthropic_model,
+        timeout=60,
+        num_retries=1,
+    )
+
+
 # --- Session 10: cross-encoder reranking ------------------------------------
 
 

@@ -20,9 +20,9 @@ from httpx import ASGITransport, AsyncClient
 
 from src.dependencies import get_rag_ingest_service, get_semantic_retriever
 from src.main import create_app
-from src.rag.ingest_service import DuplicateDocumentError, RagIngestService
-from src.rag.retriever import SemanticRetriever
-from src.rag.schemas import (
+from src.generation.rag.ingest_service import DuplicateDocumentError, RagIngestService
+from src.generation.rag.retriever import SemanticRetriever
+from src.generation.rag.schemas import (
     Budget,
     BudgetComponent,
     ClientMetadata,

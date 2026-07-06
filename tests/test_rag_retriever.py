@@ -12,9 +12,9 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from src.rag.embedding.embedder import OpenAIEmbedder
-from src.rag.retriever import SemanticRetriever
-from src.rag.store.repository import ChunkStore
+from src.generation.rag.embedding.embedder import OpenAIEmbedder
+from src.generation.rag.retriever import SemanticRetriever
+from src.generation.rag.store.repository import ChunkStore
 
 
 # ---------------------------------------------------------------------------
