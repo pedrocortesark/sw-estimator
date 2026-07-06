@@ -18,7 +18,7 @@ from __future__ import annotations
 import redis
 import structlog
 
-from src.core.config import Settings
+from src.config import Settings
 
 log = structlog.get_logger()
 
@@ -33,6 +33,9 @@ MODEL_KEYS: tuple[str, ...] = (
     "COMPRESSION_MODEL",
     "PROPOSITIONAL_CHUNKER_MODEL",
     "CONTEXTUAL_CHUNKER_MODEL",
+    # Session 11: the strict hallucination judge and the augmentation compressor.
+    "HALLUCINATION_JUDGE_MODEL",
+    "AUGMENTATION_MODEL",
 )
 
 HASH_KEY = "estimator:runtime_config"
@@ -113,16 +116,44 @@ class RuntimeModelConfig:
             raise ValueError(f"Unknown model key: {key}")
 
 
-# ---------------------------------------------------------------------------
-# Session 10 — retrieval toggles (search mode + reranking)
-# ---------------------------------------------------------------------------
+# --- Session 10: runtime toggles for the retrieval pipeline ------------------
+# Same Redis-hash override pattern as the model knobs, but for the two retrieval
+# switches the live session flips mid-demo (search mode and reranking). Kept in a
+# SEPARATE hash so resetting the model config does not clear them and vice versa.
+# The settings fields are the immutable defaults: RETRIEVAL_SEARCH_MODE ("vector"
+# | "hybrid") and RERANKER_ENABLED (bool).
+RETRIEVAL_HASH_KEY = "estimator:runtime_retrieval"
 
-RETRIEVAL_HASH_KEY = "estimator:retrieval_config"
-
+SEARCH_MODE_KEY = "RETRIEVAL_SEARCH_MODE"
+RERANK_KEY = "RERANKER_ENABLED"
+# Session 10 live: the advanced-pipeline stage toggles, same override pattern so
+# the instructor flips each stage from the Ajustes UI without a restart.
+ROUTING_KEY = "RETRIEVAL_ROUTING_ENABLED"
+QUERY_TRANSFORM_KEY = "QUERY_TRANSFORM_ENABLED"
+TEMPORAL_DECAY_KEY = "TEMPORAL_DECAY_ENABLED"
+# Session 10 live: per-task hours estimation knobs (numeric, not toggles). The
+# distance threshold is the red-flag floor the instructor calibrates mid-session.
+TASK_HOURS_TOP_K_KEY = "TASK_HOURS_TOP_K"
+TASK_HOURS_DISTANCE_THRESHOLD_KEY = "TASK_HOURS_DISTANCE_THRESHOLD"
+# Session 11 live: generation-quality stage toggles (same override pattern), so
+# the instructor flips the semantic gate, augmentation and synthesis from Ajustes.
+HALLUCINATION_GATE_KEY = "HALLUCINATION_GATE_ENABLED"
+AUGMENTATION_KEY = "AUGMENTATION_ENABLED"
+SYNTHESIS_KEY = "SYNTHESIS_ENABLED"
 RETRIEVAL_KEYS: tuple[str, ...] = (
-    "SEARCH_MODE",
-    "RERANK",
+    SEARCH_MODE_KEY,
+    RERANK_KEY,
+    ROUTING_KEY,
+    QUERY_TRANSFORM_KEY,
+    TEMPORAL_DECAY_KEY,
+    TASK_HOURS_TOP_K_KEY,
+    TASK_HOURS_DISTANCE_THRESHOLD_KEY,
+    HALLUCINATION_GATE_KEY,
+    AUGMENTATION_KEY,
+    SYNTHESIS_KEY,
 )
+
+_VALID_SEARCH_MODES = ("vector", "hybrid")
 
 
 class RuntimeRetrievalConfig:
@@ -157,61 +188,149 @@ class RuntimeRetrievalConfig:
         except redis.RedisError as exc:
             raise RuntimeConfigUnavailable(str(exc)) from exc
 
-    def get_search_mode(self) -> str | None:
-        """Override for search_mode ('vector' or 'hybrid'), or None if unset."""
-        return self._get_raw("SEARCH_MODE")
-
-    def set_search_mode(self, value: str | None) -> None:
-        """Set the search_mode override; None clears it."""
-        if value is not None and value not in ("vector", "hybrid"):
-            raise ValueError(f"Invalid search_mode: {value}")
-        self._set_raw("SEARCH_MODE", value)
-
-    def get_rerank(self) -> bool | None:
-        """Override for rerank (True/False), or None if unset."""
-        raw = self._get_raw("RERANK")
-        if raw is None:
-            return None
-        return raw.lower() == "true"
-
-    def set_rerank(self, value: bool | None) -> None:
-        """Set the rerank override; None clears it."""
-        self._set_raw("RERANK", "true" if value else "false" if value is not None else None)
-
     def effective_search_mode(self) -> str:
-        """The search_mode the pipeline should use: override if set, else the default."""
-        return self.get_search_mode() or getattr(self._settings, "search_mode", "vector")
+        override = self._get_raw(SEARCH_MODE_KEY)
+        if override in _VALID_SEARCH_MODES:
+            return override
+        return self._settings.RETRIEVAL_SEARCH_MODE
+
+    def _effective_bool(self, key: str, default: bool) -> bool:
+        override = self._get_raw(key)
+        if override is None:
+            return default
+        return override.lower() == "true"
 
     def effective_rerank(self) -> bool:
-        """The rerank value the pipeline should use: override if set, else the default."""
-        override = self.get_rerank()
-        if override is not None:
-            return override
-        return getattr(self._settings, "reranker_enabled", False)
+        return self._effective_bool(RERANK_KEY, self._settings.RERANKER_ENABLED)
 
-    def snapshot(self) -> dict[str, dict[str, str | bool]]:
-        """One entry per retrieval key: {effective, default, overridden}."""
+    def effective_routing(self) -> bool:
+        return self._effective_bool(ROUTING_KEY, self._settings.RETRIEVAL_ROUTING_ENABLED)
+
+    def effective_query_transform(self) -> bool:
+        return self._effective_bool(QUERY_TRANSFORM_KEY, self._settings.QUERY_TRANSFORM_ENABLED)
+
+    def effective_temporal_decay(self) -> bool:
+        return self._effective_bool(TEMPORAL_DECAY_KEY, self._settings.TEMPORAL_DECAY_ENABLED)
+
+    def effective_hallucination_gate(self) -> bool:
+        return self._effective_bool(
+            HALLUCINATION_GATE_KEY, self._settings.HALLUCINATION_GATE_ENABLED
+        )
+
+    def effective_augmentation(self) -> bool:
+        return self._effective_bool(AUGMENTATION_KEY, self._settings.AUGMENTATION_ENABLED)
+
+    def effective_synthesis(self) -> bool:
+        return self._effective_bool(SYNTHESIS_KEY, self._settings.SYNTHESIS_ENABLED)
+
+    def set_search_mode(self, value: str | None) -> None:
+        if value is not None and value not in _VALID_SEARCH_MODES:
+            raise ValueError(f"Invalid search mode: {value}")
+        self._set_raw(SEARCH_MODE_KEY, value)
+
+    def set_rerank(self, value: bool | None) -> None:
+        self._set_raw(RERANK_KEY, None if value is None else str(value).lower())
+
+    def set_bool(self, key: str, value: bool | None) -> None:
+        """Set one boolean stage toggle (Session 10 routing/transform/decay or
+        Session 11 gate/augmentation/synthesis)."""
+        if key not in (
+            ROUTING_KEY,
+            QUERY_TRANSFORM_KEY,
+            TEMPORAL_DECAY_KEY,
+            HALLUCINATION_GATE_KEY,
+            AUGMENTATION_KEY,
+            SYNTHESIS_KEY,
+        ):
+            raise ValueError(f"Unknown retrieval toggle: {key}")
+        self._set_raw(key, None if value is None else str(value).lower())
+
+    def effective_task_hours_top_k(self) -> int:
+        override = self._get_raw(TASK_HOURS_TOP_K_KEY)
+        if override is None:
+            return self._settings.TASK_HOURS_TOP_K
+        try:
+            return int(override)
+        except ValueError:
+            return self._settings.TASK_HOURS_TOP_K
+
+    def effective_task_hours_distance_threshold(self) -> float:
+        override = self._get_raw(TASK_HOURS_DISTANCE_THRESHOLD_KEY)
+        if override is None:
+            return self._settings.TASK_HOURS_DISTANCE_THRESHOLD
+        try:
+            return float(override)
+        except ValueError:
+            return self._settings.TASK_HOURS_DISTANCE_THRESHOLD
+
+    def set_task_hours_top_k(self, value: int | None) -> None:
+        if value is not None and value < 1:
+            raise ValueError("TASK_HOURS_TOP_K must be >= 1")
+        self._set_raw(TASK_HOURS_TOP_K_KEY, None if value is None else str(int(value)))
+
+    def set_task_hours_distance_threshold(self, value: float | None) -> None:
+        if value is not None and not (0.0 <= value <= 2.0):
+            raise ValueError("TASK_HOURS_DISTANCE_THRESHOLD must be in [0, 2]")
+        self._set_raw(
+            TASK_HOURS_DISTANCE_THRESHOLD_KEY, None if value is None else str(float(value))
+        )
+
+    def snapshot(self) -> dict[str, dict[str, object]]:
+        """``{effective, default, overridden}`` per retrieval toggle (for the UI)."""
         try:
             overrides = self._redis.hgetall(RETRIEVAL_HASH_KEY)
         except redis.RedisError as exc:
             log.warning("runtime_retrieval_read_failed", key="*", error=str(exc)[:200])
             overrides = {}
         return {
-            "search_mode": {
+            SEARCH_MODE_KEY: {
                 "effective": self.effective_search_mode(),
-                "default": getattr(self._settings, "search_mode", "vector"),
-                "overridden": "SEARCH_MODE" in overrides,
+                "default": self._settings.RETRIEVAL_SEARCH_MODE,
+                "overridden": SEARCH_MODE_KEY in overrides,
             },
-            "rerank": {
+            RERANK_KEY: {
                 "effective": self.effective_rerank(),
-                "default": getattr(self._settings, "reranker_enabled", False),
-                "overridden": "RERANK" in overrides,
+                "default": self._settings.RERANKER_ENABLED,
+                "overridden": RERANK_KEY in overrides,
+            },
+            ROUTING_KEY: {
+                "effective": self.effective_routing(),
+                "default": self._settings.RETRIEVAL_ROUTING_ENABLED,
+                "overridden": ROUTING_KEY in overrides,
+            },
+            QUERY_TRANSFORM_KEY: {
+                "effective": self.effective_query_transform(),
+                "default": self._settings.QUERY_TRANSFORM_ENABLED,
+                "overridden": QUERY_TRANSFORM_KEY in overrides,
+            },
+            TEMPORAL_DECAY_KEY: {
+                "effective": self.effective_temporal_decay(),
+                "default": self._settings.TEMPORAL_DECAY_ENABLED,
+                "overridden": TEMPORAL_DECAY_KEY in overrides,
+            },
+            TASK_HOURS_TOP_K_KEY: {
+                "effective": self.effective_task_hours_top_k(),
+                "default": self._settings.TASK_HOURS_TOP_K,
+                "overridden": TASK_HOURS_TOP_K_KEY in overrides,
+            },
+            TASK_HOURS_DISTANCE_THRESHOLD_KEY: {
+                "effective": self.effective_task_hours_distance_threshold(),
+                "default": self._settings.TASK_HOURS_DISTANCE_THRESHOLD,
+                "overridden": TASK_HOURS_DISTANCE_THRESHOLD_KEY in overrides,
+            },
+            HALLUCINATION_GATE_KEY: {
+                "effective": self.effective_hallucination_gate(),
+                "default": self._settings.HALLUCINATION_GATE_ENABLED,
+                "overridden": HALLUCINATION_GATE_KEY in overrides,
+            },
+            AUGMENTATION_KEY: {
+                "effective": self.effective_augmentation(),
+                "default": self._settings.AUGMENTATION_ENABLED,
+                "overridden": AUGMENTATION_KEY in overrides,
+            },
+            SYNTHESIS_KEY: {
+                "effective": self.effective_synthesis(),
+                "default": self._settings.SYNTHESIS_ENABLED,
+                "overridden": SYNTHESIS_KEY in overrides,
             },
         }
-
-    def reset_all(self) -> None:
-        """Drop every override (back to .env defaults)."""
-        try:
-            self._redis.delete(RETRIEVAL_HASH_KEY)
-        except redis.RedisError as exc:
-            raise RuntimeConfigUnavailable(str(exc)) from exc

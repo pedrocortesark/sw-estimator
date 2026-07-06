@@ -7,6 +7,8 @@ the vectors plus aggregate stats.
 
 from __future__ import annotations
 
+import uuid
+from datetime import date, datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
@@ -14,7 +16,16 @@ from pydantic import BaseModel, Field, model_validator
 # Closed universe of client sectors present in the sample dataset. Kept as a
 # Literal so a typo or an unexpected sector fails validation loudly instead of
 # silently leaking into the metadata.
-Sector = Literal["finance", "ecommerce", "healthcare", "industrial"]
+Sector = Literal[
+    "finance",
+    "ecommerce",
+    "healthcare",
+    "industrial",
+    "logistics",
+    "education",
+    "media",
+    "government",
+]
 Complexity = Literal["low", "medium", "high"]
 
 
@@ -114,6 +125,73 @@ class IngestResponse(BaseModel):
     ingestion_time_ms: int = Field(ge=0, description="Wall-clock ingest time.")
 
 
+# ---------------------------------------------------------------------------
+# Session 11 — incremental corpus expansion (add NEW information + index it).
+#
+# Not re-embedding the existing corpus (that would need a model change / a
+# blue-green migration, out of scope): this is growing the vector DB with new
+# documents, embedded with the SAME model, indexed by the HNSW index the
+# Session 11 migration provisions. Runs as an async job (BackgroundTask) so a
+# batch of documents can report progress instead of blocking the request.
+# ---------------------------------------------------------------------------
+
+
+class IndexRunRequest(BaseModel):
+    """Payload for ``POST /embeddings/index/runs``: a batch of new documents."""
+
+    documents: list[Budget] = Field(
+        min_length=1, max_length=200, description="New budget documents to add to the corpus."
+    )
+    document_type: str = Field(
+        default="historical_budget",
+        min_length=1,
+        max_length=50,
+        description="Document family stamped on every new document.",
+    )
+    chunk_type: str = Field(
+        default="budget_component",
+        max_length=50,
+        description="chunk_type stamped on every new chunk (filterable).",
+    )
+
+
+class IndexRunResponse(BaseModel):
+    """Response of ``POST /embeddings/index/runs``. Returned with HTTP 202."""
+
+    job_id: uuid.UUID
+    documents_total: int = Field(ge=0, description="Documents submitted for indexing.")
+    status: Literal["pending", "running", "completed", "failed"]
+
+
+class IndexJobView(BaseModel):
+    """Response of ``GET /embeddings/index/jobs/{job_id}``: progress snapshot."""
+
+    job_id: uuid.UUID
+    status: Literal["pending", "running", "completed", "failed"]
+    documents_processed: int = Field(
+        ge=0, description="Documents processed so far (indexed + skipped duplicates)."
+    )
+    error_message: str | None = None
+    started_at: datetime
+    finished_at: datetime | None = None
+
+
+class CollectionStats(BaseModel):
+    """Corpus size + index state for one collection table."""
+
+    collection: str
+    documents: int = Field(ge=0, description="Distinct documents with chunks in this collection.")
+    chunks: int = Field(ge=0, description="Chunk rows in this collection.")
+    hnsw_indexed: bool = Field(description="Whether the collection carries an HNSW vector index.")
+
+
+class CorpusStats(BaseModel):
+    """Whole-corpus snapshot, per collection — surfaced so the UI shows growth."""
+
+    collections: list[CollectionStats] = Field(default_factory=list)
+    total_chunks: int = Field(ge=0)
+
+
 class SearchRequest(BaseModel):
     """Payload for ``POST /search``."""
 
@@ -183,14 +261,44 @@ class RetrievedChunk(BaseModel):
 
     id: int
     content: str
-    sector: str
-    project_year: int
+    # sector/project_year are budget-centric; they default for the Session 10
+    # collections (transcripts, technical docs) that carry no such metadata.
+    sector: str = "unknown"
+    project_year: int = 0
     chunk_type: str
     distance: float = Field(description="Cosine distance (lower = more similar).")
     budget_id: str | None = Field(
         default=None,
         description="Traceable corpus id of the parent budget (from JSONB metadata). "
         "Used by the Session 10 retrieval evaluation to grade precision per budget.",
+    )
+    # --- Session 10 multi-index fields (default-valued → backward compatible) ---
+    collection: str = Field(
+        default="budget",
+        description="Provenance label: which collection this chunk came from "
+        "(budget / transcript / technical_doc). Travels with the chunk for "
+        "attribution, auditing and debugging (Article 5).",
+    )
+    source_id: str | None = Field(
+        default=None,
+        description="Generic traceable id of the parent document, whatever the "
+        "collection (budget_id, transcript_id, doc_id). Used to grade precision.",
+    )
+    relevance_score: float | None = Field(
+        default=None,
+        description="Final relevance score after reranking / fusion, before/after "
+        "temporal decay. Higher = better. None on the plain vector path.",
+    )
+    document_date: date | None = Field(
+        default=None,
+        description="Date used by temporal decay (budget year-start or transcript "
+        "meeting date). None when the collection carries no usable date.",
+    )
+    estimated_hours: int | None = Field(
+        default=None,
+        description="Historical hours recorded for this chunk (budget component / "
+        "historical task), flattened from JSONB metadata. None for collections that "
+        "carry no hours. Read by the per-task hours estimator (Session 10).",
     )
 
 
@@ -209,13 +317,7 @@ class RetrievalResult(BaseModel):
 class SourceCitation(BaseModel):
     """A reference from the estimate back to a retrieved chunk."""
 
-    chunk_id: int = Field(description="DB id of the retrieved chunk.")
-    document_id: str | None = Field(
-        default=None, description="budget_id of the parent document."
-    )
-    evidence: str = Field(
-        description="Verbatim span or figure from the source backing this task."
-    )
+    source_id: int = Field(description="DB id of the cited chunk (a RetrievedChunk.id).")
     relevance: Relevance
     used_for: str = Field(description="What this source contributed to the estimate.")
 
@@ -228,35 +330,77 @@ class Assumption(BaseModel):
     rationale: str
 
 
+class SourceReference(BaseModel):
+    """A verifiable, line-level citation back to a single retrieved chunk.
+
+    Session 11 lifts citation from the coarse, estimate-global
+    :class:`SourceCitation` down to the individual estimate line: every grounded
+    line carries the concrete chunk it derived from plus the verbatim evidence
+    that backs it, so a reader (and :func:`validation.verify_citations`) can
+    check the claim instead of trusting it.
+    """
+
+    chunk_id: str = Field(
+        description="Id of the retrieved chunk supporting this line — the `id` "
+        "attribute of the <source> element it was taken from."
+    )
+    document_id: str = Field(
+        description="Historical budget document the chunk belongs to — the "
+        "`document_id` attribute of the <source> element."
+    )
+    evidence: str = Field(
+        description="Verbatim span or figure copied from the source that backs "
+        "this line. Quote the source; do not paraphrase."
+    )
+
+
 class TaskItem(BaseModel):
     """One concrete engineering task inside a functional module, in engineer-days.
 
-    ``sources`` cite the historical chunk(s) the task was derived from; a task
-    with no historical analog is left uncited and should surface as an
-    :class:`Assumption` instead.
+    Each task is an estimate *line*. When ``grounded`` is True the line derives
+    from historical evidence and carries at least one :class:`SourceReference`;
+    when False the line has no sufficient source data — it must not invent hours
+    and should surface its scope as an :class:`Assumption` instead.
     """
 
     name: str
-    description: str | None = Field(
-        default=None, description="One-line scope of the task."
+    description: str | None = Field(default=None, description="One-line scope of the task.")
+    engineer_days: int | None = Field(
+        default=None,
+        ge=0,
+        description="Effort in engineer-days. None in the structure-only generation "
+        "mode (Session 10): the LLM proposes the module→task structure and the hours "
+        "are derived afterwards by per-task vector search, not inferred here. Must be "
+        "None when ``grounded`` is False (no source data => no invented hours).",
     )
-    engineer_days: int = Field(ge=0)
     grounded: bool = Field(
-        default=True,
-        description="False when no source supports this task.",
+        default=False,
+        description="True iff this line is backed by retrieved source data. False "
+        "means 'no sufficient source data': the line carries no sources and no "
+        "invented hours.",
     )
-    sources: list[SourceCitation] = Field(
+    sources: list[SourceReference] = Field(
         default_factory=list,
-        description="Source citations backing this task. Non-empty iff grounded=True.",
+        description="Per-line citations. Non-empty iff ``grounded`` is True.",
     )
 
     @model_validator(mode="after")
-    def check_grounded_consistency(self) -> "TaskItem":
-        """Enforce grounded/sources consistency."""
+    def _grounding_integrity(self) -> "TaskItem":
+        """Enforce the Session 11 line-level grounding contract.
+
+        A grounded line must cite at least one source; an ungrounded line must
+        neither cite sources nor invent hours. Violations raise so Instructor
+        re-prompts the model rather than letting an unverifiable line through.
+        """
         if self.grounded and not self.sources:
-            raise ValueError("grounded=True requires at least one source citation.")
+            raise ValueError("a grounded line must cite at least one source")
         if not self.grounded and self.sources:
-            raise ValueError("grounded=False must have empty sources list.")
+            raise ValueError("an ungrounded line (grounded=False) must not carry sources")
+        if not self.grounded and self.engineer_days is not None:
+            raise ValueError(
+                "an ungrounded line (grounded=False) must leave engineer_days null; "
+                "do not invent hours without source data"
+            )
         return self
 
 
@@ -265,9 +409,7 @@ class WorkModule(BaseModel):
     grouping the concrete tasks needed to deliver it."""
 
     name: str
-    description: str | None = Field(
-        default=None, description="What this functional block covers."
-    )
+    description: str | None = Field(default=None, description="What this functional block covers.")
     tasks: list[TaskItem] = Field(default_factory=list)
 
 
@@ -293,35 +435,115 @@ class Estimate(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Session 11 — per-line citation verification.
+# Session 11 — programmatic citation verification.
 #
-# After generation, every task's cited chunk_ids are checked against the set
-# of retrieved chunk ids. A dangling citation (chunk_id not in the retrieved
-# context) is a quality failure, not a cosmetic detail.
+# The output of :func:`validation.verify_citations`: a per-line audit of where
+# every estimate line's citation points and whether that chunk was actually in
+# the retrieved context. A dangling citation (an id the LLM never saw) is a
+# grounding failure, not a cosmetic detail — the report keeps it visible.
 # ---------------------------------------------------------------------------
 
+LineCitationStatus = Literal["grounded", "dangling", "insufficient"]
 
-class CitationLineStatus(BaseModel):
-    """Verification status for one task line."""
 
-    module_name: str
-    task_name: str
-    grounded: bool
-    cited_chunk_ids: list[int]
-    valid_chunk_ids: list[int]
-    fabricated_chunk_ids: list[int]
-    status: Literal["grounded", "dangling_citation", "ungrounded"]
+class LineCitation(BaseModel):
+    """The citation status of a single estimate line."""
+
+    module: str = Field(description="Module the line belongs to.")
+    component: str = Field(description="The line (task) name.")
+    status: LineCitationStatus = Field(
+        description="grounded = all cited chunks were retrieved; dangling = at "
+        "least one cited chunk_id was never in the context; insufficient = the "
+        "line is flagged as having no sufficient source data."
+    )
+    cited_chunk_ids: list[str] = Field(default_factory=list)
+    dangling_chunk_ids: list[str] = Field(
+        default_factory=list, description="Cited ids that were never retrieved."
+    )
 
 
 class CitationReport(BaseModel):
-    """Aggregate citation verification report for an estimate."""
+    """Aggregate result of verifying an estimate's citations against the context."""
 
-    total_lines: int
-    grounded_lines: int
-    dangling_citation_lines: int
-    ungrounded_lines: int
-    lines: list[CitationLineStatus]
-    all_valid: bool = Field(description="True if no dangling citations exist.")
+    total_lines: int = Field(ge=0)
+    grounded_lines: int = Field(ge=0, description="Lines whose every citation was retrieved.")
+    dangling_lines: int = Field(ge=0, description="Lines with at least one fabricated citation.")
+    insufficient_lines: int = Field(ge=0, description="Lines flagged as no sufficient data.")
+    verified_citations: int = Field(
+        ge=0, description="Count of individual citations that resolved to a retrieved chunk."
+    )
+    dangling_citations: list[str] = Field(
+        default_factory=list,
+        description="Sorted, de-duplicated cited ids that were never retrieved "
+        "(line-level and estimate-global). Empty means every citation is real.",
+    )
+    lines: list[LineCitation] = Field(default_factory=list)
+
+    @property
+    def has_dangling(self) -> bool:
+        """True when any citation points outside the retrieved context."""
+        return bool(self.dangling_citations)
+
+
+# ---------------------------------------------------------------------------
+# Session 11 — semantic hallucination gate.
+#
+# verify_citations proves REFERENTIAL integrity (the cited chunk was retrieved).
+# It cannot prove the number is ENTAILED by that chunk: a line can cite a real
+# source and still invent its hours. The gate adds the semantic layer — a
+# deterministic numeric anchor + a strict judge — grading each grounded line
+# grounded / insufficient / degraded.
+# ---------------------------------------------------------------------------
+
+
+class LineVerdict(BaseModel):
+    """Strict-judge verdict for a single estimate line."""
+
+    module: str = Field(description="Module the line belongs to (echoed for matching).")
+    component: str = Field(description="The line (task) name (echoed for matching).")
+    entailed: bool = Field(
+        description="True iff the cited evidence supports the line's hours/scope."
+    )
+    reason: str = Field(description="One-sentence justification for the verdict.")
+
+
+LineGateStatus = Literal["grounded", "degraded", "insufficient"]
+
+
+class LineGate(BaseModel):
+    """Graded semantic-gate result for one estimate line."""
+
+    module: str
+    component: str
+    status: LineGateStatus = Field(
+        description="grounded = anchor and judge both accept the line; degraded = a "
+        "grounded line whose hours are not entailed by the cited evidence (numeric "
+        "anchor miss or judge rejection); insufficient = the line carried no data."
+    )
+    numeric_deviation: float | None = Field(
+        default=None,
+        ge=0.0,
+        description="Relative gap between the line's hours and the deterministic anchor "
+        "(|line - anchor| / anchor). None when no numeric anchor was available.",
+    )
+    reason: str = Field(default="", description="Why the line was degraded (empty when grounded).")
+
+
+class HallucinationReport(BaseModel):
+    """Aggregate of the semantic gate over an estimate's lines."""
+
+    total_lines: int = Field(ge=0)
+    grounded_lines: int = Field(ge=0, description="Lines the anchor and judge both accept.")
+    degraded_lines: int = Field(
+        ge=0, description="Lines that cite a real source but whose number it does not entail."
+    )
+    insufficient_lines: int = Field(ge=0, description="Lines flagged as no sufficient data.")
+    lines: list[LineGate] = Field(default_factory=list)
+
+    @property
+    def has_degraded(self) -> bool:
+        """True when any grounded line failed the semantic check."""
+        return self.degraded_lines > 0
 
 
 # ---- HTTP request models for the Session 9 routers ------------------------
@@ -382,6 +604,13 @@ class AssembleRequest(BaseModel):
 
     chunks: list[RetrievedChunk]
     max_context_tokens: int | None = Field(default=None, ge=256, le=64_000)
+    # Session 11 augmentation toggles (per request, so a demo can show the effect).
+    augment: bool = Field(
+        default=False,
+        description="Apply the Session 11 augmentation passes before assembly.",
+    )
+    compress: bool = Field(default=True, description="Compress each source to its key points.")
+    reorder: bool = Field(default=True, description="Edge-load reorder (lost-in-the-middle).")
 
 
 class AssembleResult(BaseModel):
@@ -392,6 +621,9 @@ class AssembleResult(BaseModel):
     kept_chunks: list[RetrievedChunk]
     dropped_count: int = Field(ge=0, description="Chunks dropped by the token budget.")
     token_count: int = Field(ge=0, description="Tokens in the assembled context block.")
+    augmented: bool = Field(
+        default=False, description="Whether the Session 11 augmentation passes ran."
+    )
 
 
 class StructureRequest(BaseModel):
@@ -425,15 +657,32 @@ class GenerateResult(BaseModel):
     the wizard surfaces (instead of auto-retrying like the full pipeline)."""
 
     estimate: Estimate
-    fabricated_source_ids: list[int] = Field(
+    fabricated_source_ids: list[str] = Field(
         default_factory=list,
-        description="Cited source ids not present in kept_chunks (empty = clean).",
+        description="Cited chunk_ids not present in kept_chunks (empty = clean). "
+        "Mirrors ``citation_report.dangling_citations`` for backward compatibility.",
     )
     citation_report: CitationReport | None = Field(
         default=None,
-        description="Per-line citation verification report.",
+        description="Session 11 per-line citation verification report (None for the "
+        "structure-only stage, which has no sources to verify).",
     )
     coherent: bool = Field(description="False when an insufficient estimate still carries numbers.")
+
+
+class VerifyRequest(BaseModel):
+    """Payload for ``POST /v1/estimate/stages/verify`` (Session 11 semantic gate).
+
+    Takes a generated estimate and the chunks its context was built from, and
+    runs the deterministic anchor + strict judge over every grounded line."""
+
+    estimate: Estimate
+    kept_chunks: list[RetrievedChunk] = Field(default_factory=list)
+    use_judge: bool = Field(
+        default=True,
+        description="When False, only the deterministic numeric anchor runs (no LLM) — "
+        "useful for a fast, free demo of the gate's arithmetic half.",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -454,6 +703,20 @@ class TaskNeighbor(BaseModel):
     budget_id: str | None = Field(default=None, description="Traceable parent corpus id.")
     estimated_hours: int = Field(ge=0, description="Hours recorded for this historical task.")
     distance: float = Field(description="Cosine distance to the query task (lower = closer).")
+
+
+class HourRange(BaseModel):
+    """A synthesized hour RANGE emitted when the historical sources contradict.
+
+    Session 11: a single weighted consensus hides disagreement (one source says
+    40h, another 90h → a misleading 65h point). When the neighbour dispersion
+    crosses the contradiction threshold, synthesis surfaces the spread as a range
+    plus the reason, instead of averaging the conflict away.
+    """
+
+    low: int = Field(ge=0, description="Low end of the plausible hours.")
+    high: int = Field(ge=0, description="High end of the plausible hours.")
+    reason: str = Field(description="Why the sources disagree (the conflict, named).")
 
 
 class TaskHoursEstimate(BaseModel):
@@ -483,6 +746,13 @@ class TaskHoursEstimate(BaseModel):
     )
     neighbors: list[TaskNeighbor] = Field(
         default_factory=list, description="The historical tasks the hours were derived from."
+    )
+    # Session 11: when the neighbours contradict beyond the dispersion threshold,
+    # synthesis surfaces the spread as a range with a reason instead of a point.
+    hours_range: HourRange | None = Field(
+        default=None,
+        description="Present only when the historical sources contradict; the point "
+        "``estimated_hours`` still carries the consensus for editing.",
     )
 
 

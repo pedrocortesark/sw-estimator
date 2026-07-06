@@ -15,7 +15,7 @@ from typing import Literal
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.foundation.persistence.models import IngestionJobRow
+from src.persistence.models import IngestionJobRow
 
 JobStatusName = Literal["pending", "running", "completed", "failed"]
 
@@ -64,6 +64,9 @@ class JobsRepository:
             error_message=error_message[:2048],
             finished_at=datetime.now(timezone.utc),
         )
+
+    def set_documents_count(self, job_id: uuid.UUID, *, documents_count: int) -> None:
+        self._update(job_id, documents_count=documents_count)
 
     def _update(self, job_id: uuid.UUID, **fields) -> None:
         row = self._session.get(IngestionJobRow, job_id)
