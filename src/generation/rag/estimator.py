@@ -18,26 +18,44 @@ from uuid import uuid4
 
 import structlog
 
-from src.core.config import get_settings
+from src.config import get_settings
 from src.generation.rag.context_assembler import build_context_block, truncate_to_token_budget
 from src.generation.rag.errors import GenerationError, MalformedEstimateError
+from src.generation.rag.quality.augmentation import augment_chunks
+from src.generation.rag.quality.hallucination import gate_estimate
 from src.generation.rag.observability import log_stage
-from src.generation.rag.prompt_builder import build_system_prompt, build_user_message
+from src.generation.rag.prompt_builder import (
+    build_structure_system_prompt,
+    build_structure_user_message,
+    build_system_prompt,
+    build_user_message,
+)
 from src.generation.rag.query_reformulator import compose_search_text, reformulate_query
-from src.generation.rag.retriever import search_chunks
+from src.generation.rag.retrieval.pipeline import retrieve
 from src.generation.rag.schemas import Estimate, EstimationQuery
-from src.generation.rag.validation import check_coherence, validate_citations, verify_citations
+from src.generation.rag.validation import check_coherence, verify_citations
 
 log = structlog.get_logger()
 
 # Sectors present in the corpus; only filter retrieval when the reformulated
 # brief names one of them (avoids over-filtering on free-text sector values).
-_KNOWN_SECTORS = {"finance", "ecommerce", "healthcare", "industrial"}
+_KNOWN_SECTORS = {
+    "finance",
+    "ecommerce",
+    "healthcare",
+    "industrial",
+    "logistics",
+    "education",
+    "media",
+    "government",
+}
 
 
 async def generate_estimate(
     context_block: str,
     structured_query: EstimationQuery,
+    *,
+    include_hours: bool = True,
 ) -> Estimate:
     """Generate a grounded :class:`Estimate` from an assembled context block.
 
@@ -47,6 +65,10 @@ async def generate_estimate(
         The ``<source>`` XML block produced by the context assembler.
     structured_query:
         The reformulated project brief.
+    include_hours:
+        When ``False`` (Session 10 structure-only mode) the model returns the
+        module → task structure without effort numbers; the hours are derived
+        afterwards by per-task vector search.
 
     Returns
     -------
@@ -59,7 +81,7 @@ async def generate_estimate(
     GenerationError
         If the LLM call fails irrecoverably.
     """
-    return await _generate(context_block, structured_query)
+    return await _generate(context_block, structured_query, include_hours=include_hours)
 
 
 async def _generate(
@@ -67,6 +89,7 @@ async def _generate(
     structured_query: EstimationQuery,
     *,
     feedback: str | None = None,
+    include_hours: bool = True,
 ) -> Estimate:
     """Single generation call. ``feedback`` appends a correction note for retries."""
     from src.dependencies import get_llm_wrapper
@@ -79,15 +102,49 @@ async def _generate(
         user_message += f"\n\n<correction>\n{feedback}\n</correction>"
 
     try:
-        estimate, _meta = await wrapper.complete_structured(
-            system_prompt=build_system_prompt(),
+        estimate, _meta = await asyncio.to_thread(
+            wrapper.complete_structured,
+            system_prompt=build_system_prompt(include_hours=include_hours),
             user_message=user_message,
             response_model=Estimate,
-            model_override=settings.generation_model,
+            model_override=settings.GENERATION_MODEL,
+            reasoning_effort=settings.GENERATION_REASONING_EFFORT,
+            # gpt-5 reasoning tokens count against max_tokens; the 4000 default
+            # is exhausted by reasoning alone and truncates the JSON. See
+            # Settings.GENERATION_MAX_TOKENS.
+            max_tokens=settings.GENERATION_MAX_TOKENS,
         )
         return estimate
     except Exception as exc:  # noqa: BLE001
         raise GenerationError("Grounded estimate generation failed.") from exc
+
+
+async def generate_structure(structured_query: EstimationQuery) -> Estimate:
+    """Generate the module→task STRUCTURE as a free decomposition of the brief.
+
+    Session 10: the wizard no longer grounds the structure in retrieved budgets
+    (that impoverished the tree). This produces modules and tasks WITHOUT hours
+    and WITHOUT sources — the hours are derived afterwards by per-task vector
+    search (:mod:`app.generation.rag.task_hours`). No citation validation runs
+    here because there are no sources to validate.
+    """
+    from src.dependencies import get_llm_wrapper
+
+    settings = get_settings()
+    wrapper = get_llm_wrapper()
+    try:
+        estimate, _meta = await asyncio.to_thread(
+            wrapper.complete_structured,
+            system_prompt=build_structure_system_prompt(),
+            user_message=build_structure_user_message(structured_query),
+            response_model=Estimate,
+            model_override=settings.GENERATION_MODEL,
+            reasoning_effort=settings.GENERATION_REASONING_EFFORT,
+            max_tokens=settings.GENERATION_MAX_TOKENS,
+        )
+        return estimate
+    except Exception as exc:  # noqa: BLE001
+        raise GenerationError("Structure generation failed.") from exc
 
 
 def _insufficient(explanation: str) -> Estimate:
@@ -160,14 +217,29 @@ async def estimate_from_transcript(
             raise GenerationError("Embedding service is not available (no OpenAI key).")
         query_embedding = await asyncio.to_thread(embedder.embed_one, search_text)
 
-    # 3. Metadata-filtered retrieval with soft-fail.
+    # 3. Metadata-filtered retrieval with soft-fail. Search mode + reranking
+    #    follow the runtime/settings defaults (Session 10), so the grounded
+    #    estimate benefits from hybrid/rerank without changing this contract.
+    from src.dependencies import get_runtime_retrieval_config
+
+    runtime_retrieval = get_runtime_retrieval_config()
+    search_mode = runtime_retrieval.effective_search_mode()
+    rerank = runtime_retrieval.effective_rerank()
     sector = query.sector.lower().strip() if query.sector else None
     sectors = [sector] if sector in _KNOWN_SECTORS else None
-    with log_stage("retrieval", request_id, sectors=sectors):
-        retrieval = await search_chunks(
-            query_embedding,
+    with log_stage(
+        "retrieval", request_id, sectors=sectors, search_mode=search_mode, rerank=rerank
+    ):
+        retrieval = await retrieve(
+            query_embedding=query_embedding,
+            query_text=search_text,
+            search_mode=search_mode,
+            rerank=rerank,
             top_k=settings.RETRIEVAL_TOP_K,
+            recall_k=settings.RETRIEVAL_RECALL_TOP_K,
+            rerank_top_n=settings.RERANK_TOP_N,
             distance_threshold=settings.RETRIEVAL_DISTANCE_THRESHOLD,
+            rrf_k=settings.RRF_K,
             sectors=sectors,
         )
 
@@ -182,32 +254,75 @@ async def estimate_from_transcript(
             await asyncio.to_thread(store.set, idempotency_key, estimate)
         return estimate
 
-    # 4. Truncate to the token budget (whole chunks only) + assemble context.
+    # 4. Truncate to the token budget (whole chunks only), augment, assemble.
+    #    Session 11 augmentation (compress → edge-load reorder) runs on the kept
+    #    chunks; it preserves ids, so citation verification below is unaffected.
     encoder = get_token_encoder()
     kept = truncate_to_token_budget(retrieval.chunks, settings.MAX_CONTEXT_TOKENS, encoder)
+    if runtime_retrieval.effective_augmentation():
+        kept = augment_chunks(
+            kept,
+            compress=settings.AUGMENTATION_COMPRESS,
+            reorder=settings.AUGMENTATION_REORDER,
+        )
     context_block = build_context_block(kept)
 
     # 5. Generate the grounded estimate.
     with log_stage("generation", request_id, sources=len(kept)):
         estimate = await generate_estimate(context_block, structured_query=query)
 
-    # 6. Verify citations; one corrective retry on dangling ids.
-    report = verify_citations(estimate, kept)
-    log.info("citation_report", request_id=request_id, **report.model_dump())
-
-    if not report.all_valid:
-        fabricated = [cid for line in report.lines for cid in line.fabricated_chunk_ids]
+    # 6. Verify per-line citations; one corrective retry on dangling ids.
+    retrieved_ids = {str(chunk.id) for chunk in kept}
+    report = verify_citations(estimate, retrieved_ids)
+    log.info(
+        "citation_report",
+        request_id=request_id,
+        total_lines=report.total_lines,
+        grounded_lines=report.grounded_lines,
+        dangling_lines=report.dangling_lines,
+        insufficient_lines=report.insufficient_lines,
+        verified_citations=report.verified_citations,
+        dangling_citations=report.dangling_citations,
+    )
+    if report.has_dangling:
         feedback = (
-            f"your previous response cited invalid source ids: {fabricated}. "
-            "Only cite ids that appear in the <sources> block. "
-            "For each task, include the verbatim evidence from the source."
+            f"your previous response cited chunk_ids absent from the context: "
+            f"{report.dangling_citations}. Only cite the `id` attribute of <source> "
+            "elements that appear in the <sources> block, and copy the matching "
+            "document_id and a verbatim evidence span for each."
         )
-        with log_stage("citation_retry", request_id, fabricated=fabricated):
+        with log_stage("citation_retry", request_id, dangling=report.dangling_citations):
             estimate = await _generate(context_block, query, feedback=feedback)
-        report = verify_citations(estimate, kept)
-        log.info("citation_report_after_retry", request_id=request_id, **report.model_dump())
-        if not report.all_valid:
-            log.warning("citations_unrepaired", request_id=request_id, report=report.model_dump())
+        report = verify_citations(estimate, retrieved_ids)
+        if report.has_dangling:
+            log.warning(
+                "citations_unrepaired",
+                request_id=request_id,
+                dangling_citations=report.dangling_citations,
+            )
+            estimate = estimate.model_copy(update={"confidence": "low"})
+
+    # 6.5 Semantic hallucination gate (Session 11): referential integrity is not
+    #     entailment. A deterministic numeric anchor + a strict judge grade every
+    #     grounded line; a line that claims more than its evidence supports is a
+    #     hallucination wearing a real citation → downgrade confidence.
+    if runtime_retrieval.effective_hallucination_gate():
+        with log_stage("hallucination_gate", request_id):
+            gate = await gate_estimate(
+                estimate,
+                kept,
+                tolerance=settings.HALLUCINATION_NUMERIC_TOLERANCE,
+                judge_model=settings.HALLUCINATION_JUDGE_MODEL,
+            )
+        log.info(
+            "hallucination_report",
+            request_id=request_id,
+            total_lines=gate.total_lines,
+            grounded_lines=gate.grounded_lines,
+            degraded_lines=gate.degraded_lines,
+            insufficient_lines=gate.insufficient_lines,
+        )
+        if gate.has_degraded and estimate.confidence in ("high", "medium"):
             estimate = estimate.model_copy(update={"confidence": "low"})
 
     # 7. Coherence guard: one repair attempt, then reject.

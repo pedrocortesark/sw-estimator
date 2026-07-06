@@ -83,6 +83,18 @@ def get_rag_ingest_service():
 
 
 @lru_cache
+def get_corpus_index_service():
+    """Session 11 batch corpus expansion. ``None`` without an OpenAI key
+    (mirrors ``get_rag_ingest_service``); the router maps that to a 500."""
+    from src.generation.rag.index_service import CorpusIndexService
+
+    ingest = get_rag_ingest_service()
+    if ingest is None:
+        return None
+    return CorpusIndexService(ingest=ingest)
+
+
+@lru_cache
 def get_semantic_retriever():
     """Query-side counterpart of the ingest service. Same ``None`` contract."""
     from src.generation.rag.retriever import SemanticRetriever
