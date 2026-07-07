@@ -38,6 +38,7 @@ from src.generation.agentic.agent_schemas import (
 )
 from src.generation.rag.retrieval.collections import Collection
 from src.generation.rag.retrieval.pipeline import retrieve
+from src.persistence.database import get_async_session_factory
 
 log = structlog.get_logger()
 
@@ -247,8 +248,8 @@ async def default_retrieval_backend(args: SearchBudgetsArgs) -> list[dict[str, A
         query_text=args.query,
         collection=Collection.BUDGET,
         chunk_types=["historical_task"],
-        top_k=settings.AGENT_SEARCH_TOP_K,
-        distance_threshold=settings.AGENT_SEARCH_DISTANCE_THRESHOLD,
+        top_k=settings.agent_search_top_k,
+        distance_threshold=settings.agent_search_distance_threshold,
         sectors=sectors,
     )
     return [

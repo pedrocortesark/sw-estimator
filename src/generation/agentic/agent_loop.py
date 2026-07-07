@@ -76,6 +76,12 @@ def _function_calls(output: list[Any]) -> list[Any]:
     return [item for item in output if getattr(item, "type", None) == "function_call"]
 
 
+def _is_reasoning_model(model: str) -> bool:
+    """Check if a model supports reasoning parameters (o1, o3, gpt-5, etc.)."""
+    reasoning_prefixes = ("o1", "o3", "gpt-5", "gpt5")
+    return any(model.startswith(prefix) for prefix in reasoning_prefixes)
+
+
 async def run_estimation_agent(
     transcript: str,
     *,
@@ -97,14 +103,23 @@ async def run_estimation_agent(
     stopped_reason: str = "completed"
 
     log.info("agent_run_start", model=model, effort=reasoning_effort)
-    response = await client.responses.create(
-        model=model,
-        instructions=SYSTEM_PROMPT,
-        input=[{"role": "user", "content": transcript}],
-        tools=TOOL_SCHEMAS,
-        reasoning={"effort": reasoning_effort, "summary": "auto"},
-        store=True,
-    )
+    
+    # Build reasoning config - only for reasoning models (o1, o3, gpt-5, etc.)
+    reasoning_config = None
+    if _is_reasoning_model(model):
+        reasoning_config = {"effort": reasoning_effort, "summary": "auto"}
+    
+    create_kwargs = {
+        "model": model,
+        "instructions": SYSTEM_PROMPT,
+        "input": [{"role": "user", "content": transcript}],
+        "tools": TOOL_SCHEMAS,
+        "store": True,
+    }
+    if reasoning_config:
+        create_kwargs["reasoning"] = reasoning_config
+    
+    response = await client.responses.create(**create_kwargs)
     iterations = 1
 
     while True:
@@ -161,14 +176,17 @@ async def run_estimation_agent(
                 }
             )
 
-        response = await client.responses.create(
-            model=model,
-            previous_response_id=response.id,
-            input=tool_outputs,
-            tools=TOOL_SCHEMAS,
-            reasoning={"effort": reasoning_effort, "summary": "auto"},
-            store=True,
-        )
+        re_call_kwargs = {
+            "model": model,
+            "previous_response_id": response.id,
+            "input": tool_outputs,
+            "tools": TOOL_SCHEMAS,
+            "store": True,
+        }
+        if reasoning_config:
+            re_call_kwargs["reasoning"] = reasoning_config
+        
+        response = await client.responses.create(**re_call_kwargs)
         iterations += 1
 
     estimate: AgentEstimate | None = None
