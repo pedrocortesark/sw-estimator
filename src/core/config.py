@@ -77,6 +77,10 @@ class Settings(BaseSettings):
     reranker_enabled: bool = False
     reranker_model: str = "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"
 
+    # --- Session 12 — agent search configuration ---
+    agent_search_top_k: int = 5
+    agent_search_distance_threshold: float = 0.7
+
     # --- Session 9/10 — generation and retrieval settings ---
     # Embedding model for vector search
     embedding_model: str = "text-embedding-3-small"

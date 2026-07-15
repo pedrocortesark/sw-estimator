@@ -484,6 +484,11 @@ class CitationReport(BaseModel):
         """True when any citation points outside the retrieved context."""
         return bool(self.dangling_citations)
 
+    @property
+    def all_valid(self) -> bool:
+        """True when no citation points outside the retrieved context."""
+        return not self.has_dangling
+
 
 # ---------------------------------------------------------------------------
 # Session 11 — semantic hallucination gate.
