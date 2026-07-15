@@ -5,6 +5,7 @@ from __future__ import annotations
 from functools import lru_cache
 
 import structlog
+from openai import AsyncOpenAI
 
 from src.services.estimation import EstimationService
 
@@ -31,6 +32,25 @@ def get_openai_client():
         logger.warning("openai_client_disabled", reason="no_openai_key")
         return None
     return OpenAI(api_key=settings.openai_api_key)
+
+
+@lru_cache
+def get_async_openai_client() -> AsyncOpenAI | None:
+    """Lazy async OpenAI client for the Session 12 agentic loop.
+
+    The agent (``src/generation/agentic/agent_loop.py``) drives the raw Responses
+    API (``client.responses.create``) with ``await``, alongside the async
+    ``retrieve()`` its ``search_budgets`` tool wraps — so it needs an async client,
+    not the sync one used by moderation/embeddings. Returns ``None`` when no
+    OpenAI key is configured (the agent needs OpenAI specifically for the
+    Responses API).
+    """
+    from src.core.config import get_settings
+
+    settings = get_settings()
+    if not settings.openai_api_key:
+        return None
+    return AsyncOpenAI(api_key=settings.openai_api_key)
 
 
 @lru_cache
