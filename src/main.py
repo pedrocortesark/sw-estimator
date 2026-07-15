@@ -1,12 +1,13 @@
 from contextlib import asynccontextmanager
 
+import logfire
 from fastapi import FastAPI
 
 from src.core.config import get_settings
 from src.core.exceptions import setup_exception_handlers
 from src.core.logging import logger, configure_logging
 from src.routers import health, estimation, sessions, embeddings, search
-from src.api.routers import corpus_index, estimate_agent
+from src.api.routers import corpus_index, estimate_agent, estimate_graph
 
 
 @asynccontextmanager
@@ -27,6 +28,17 @@ async def lifespan(app: FastAPI):
         env=settings.app_env,
         log_level=settings.log_level,
     )
+
+    # Configure Logfire for distributed tracing (Session 13)
+    logfire.configure(
+        service_name="sw-estimator",
+        send_to_logfire="if-token-present",
+    )
+    logfire.instrument_fastapi(app)
+    logfire.instrument_httpx()
+    logfire.instrument_asyncpg()
+
+    logger.info("logfire_configured", service_name="sw-estimator")
 
     yield  # <-- FastAPI serves requests here
 
@@ -60,6 +72,8 @@ def create_app() -> FastAPI:
     app.include_router(corpus_index.router)
     # Session 12 — hand-written agent over the budget retrieval (decision layer).
     app.include_router(estimate_agent.router)
+    # Session 13 — LangGraph-based estimation pipeline.
+    app.include_router(estimate_graph.router)
 
     setup_exception_handlers(app)
 
