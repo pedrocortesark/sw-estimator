@@ -81,6 +81,28 @@ class Settings(BaseSettings):
     agent_search_top_k: int = 5
     agent_search_distance_threshold: float = 0.7
 
+    # --- Session 13 — graph models and configuration ---
+    # Models for the multi-agent graph nodes
+    graph_classifier_model: str = "gpt-4o-mini"
+    graph_analysis_model: str = "gpt-4o"
+    graph_proposal_model: str = "gpt-4o"
+    graph_extraction_model: str = "gpt-4o-mini"
+    graph_generation_model: str = "gpt-4o"
+    
+    # Graph feature flags
+    graph_proposal_enabled: bool = True
+    graph_personas_enabled: bool = True
+    
+    # Classifier complexity → structure agent reasoning effort mapping
+    graph_structure_effort_by_complexity: dict[str, str] = {
+        "low": "low",
+        "medium": "medium",
+        "high": "high",
+    }
+    
+    # Logfire configuration
+    logfire_service_name: str = "sw-estimator"
+
     # --- Session 9/10 — generation and retrieval settings ---
     # Embedding model for vector search
     embedding_model: str = "text-embedding-3-small"

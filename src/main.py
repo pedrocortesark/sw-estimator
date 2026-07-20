@@ -1,6 +1,8 @@
 from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack
 
 import logfire
+import structlog
 from fastapi import FastAPI
 
 from src.core.config import get_settings
@@ -8,6 +10,8 @@ from src.core.exceptions import setup_exception_handlers
 from src.core.logging import logger, configure_logging
 from src.routers import health, estimation, sessions, embeddings, search
 from src.api.routers import corpus_index, estimate_agent, estimate_graph
+
+log = structlog.get_logger()
 
 
 @asynccontextmanager
@@ -31,18 +35,38 @@ async def lifespan(app: FastAPI):
 
     # Configure Logfire for distributed tracing (Session 13)
     logfire.configure(
-        service_name="sw-estimator",
+        service_name=settings.logfire_service_name,
         send_to_logfire="if-token-present",
     )
     logfire.instrument_fastapi(app)
     logfire.instrument_httpx()
     logfire.instrument_asyncpg()
 
-    logger.info("logfire_configured", service_name="sw-estimator")
+    logger.info("logfire_configured", service_name=settings.logfire_service_name)
+
+    # Session 13: build the estimation graph with a Postgres checkpointer over the
+    # project database (its tables coexist with pgvector). Held open for the app's
+    # lifetime via an AsyncExitStack; a failure here (e.g. Postgres unreachable)
+    # leaves app.state.graph = None so the graph endpoint 503s WITHOUT taking down
+    # the unrelated routers.
+    app.state.graph = None
+    app.state._graph_stack = AsyncExitStack()
+    try:
+        from src.domain.graph.build import build_graph
+        from src.domain.graph.checkpointer import open_checkpointer
+
+        checkpointer = await app.state._graph_stack.enter_async_context(open_checkpointer())
+        app.state.graph = build_graph(checkpointer)
+        log.info("graph_ready")
+    except Exception as exc:  # noqa: BLE001 — the graph is optional infrastructure.
+        log.error("graph_init_failed", error=str(exc)[:400])
+
+    log.info("application_started", environment=settings.app_env)
 
     yield  # <-- FastAPI serves requests here
 
     # --- Shutdown ---
+    await app.state._graph_stack.aclose()
     logger.info("Shutting down sw-estimator...")
 
 

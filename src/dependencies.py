@@ -240,3 +240,21 @@ def _shared_service() -> EstimationService:
 def get_estimation_service() -> EstimationService:
     """FastAPI dependency — returns the shared ``EstimationService``."""
     return _shared_service()
+
+
+# --- Session 13 — graph activity log ------------------------------------
+
+
+@lru_cache(maxsize=1)
+def _shared_graph_activity():
+    """Singleton ``GraphActivityLog`` — created once per worker process."""
+    from src.core.config import get_settings
+    from src.domain.graph.activity import GraphActivityLog
+
+    settings = get_settings()
+    return GraphActivityLog.from_settings(settings)
+
+
+def get_graph_activity():
+    """FastAPI dependency — returns the shared ``GraphActivityLog``."""
+    return _shared_graph_activity()
