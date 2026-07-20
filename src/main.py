@@ -9,7 +9,7 @@ from src.core.config import get_settings
 from src.core.exceptions import setup_exception_handlers
 from src.core.logging import logger, configure_logging
 from src.routers import health, estimation, sessions, embeddings, search
-from src.api.routers import corpus_index, estimate_agent, estimate_graph
+from src.api.routers import corpus_index, estimate_agent, estimate_graph, estimate_multi_agent
 
 log = structlog.get_logger()
 
@@ -50,14 +50,17 @@ async def lifespan(app: FastAPI):
     # leaves app.state.graph = None so the graph endpoint 503s WITHOUT taking down
     # the unrelated routers.
     app.state.graph = None
+    app.state.multi_agent_graph = None
     app.state._graph_stack = AsyncExitStack()
     try:
         from src.domain.graph.build import build_graph
+        from src.domain.multi_agent.build import build_multi_agent_graph
         from src.domain.graph.checkpointer import open_checkpointer
 
         checkpointer = await app.state._graph_stack.enter_async_context(open_checkpointer())
         app.state.graph = build_graph(checkpointer)
-        log.info("graph_ready")
+        app.state.multi_agent_graph = build_multi_agent_graph(checkpointer)
+        log.info("graphs_ready")
     except Exception as exc:  # noqa: BLE001 — the graph is optional infrastructure.
         log.error("graph_init_failed", error=str(exc)[:400])
 
@@ -98,6 +101,8 @@ def create_app() -> FastAPI:
     app.include_router(estimate_agent.router)
     # Session 13 — LangGraph-based estimation pipeline.
     app.include_router(estimate_graph.router)
+    # Session 14 — Multi-agent supervisor/workers with human-in-the-loop.
+    app.include_router(estimate_multi_agent.router)
 
     setup_exception_handlers(app)
 

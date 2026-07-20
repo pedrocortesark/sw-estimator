@@ -1,0 +1,59 @@
+Reunión exploratoria — Proyecto sin definir claramente
+Cliente: Juan Pérez (Gerente, Empresa XYZ)
+Consultor: equipo de estimación
+Fecha: primera toma de contacto
+
+[00:00:10] Consultor: Gracias por el tiempo, Juan. Cuéntanos qué tenéis en mente.
+
+[00:00:25] Juan: Pues mira, estamos pensando en hacer algo con tecnología, pero no tenemos muy claro qué. 
+La idea es mejorar procesos, quizás automatizar cosas, pero no sabemos exactamente qué necesitamos.
+
+[00:01:15] Consultor: ¿Podrías darnos más detalles sobre los procesos que queréis mejorar?
+
+[00:01:30] Juan: Bueno, tenemos varios departamentos: ventas, marketing, operaciones... cada uno tiene sus cosas. 
+Quizás un sistema que integre todo, o tal vez varias aplicaciones separadas. No lo tenemos decidido.
+
+[00:02:20] Consultor: ¿Y qué tipo de automatización tenéis en mente?
+
+[00:02:35] Juan: Pues no sé, algo con inteligencia artificial seguramente. O blockchain, que está muy de moda. 
+O quizás machine learning. La verdad es que no tenemos requisitos técnicos claros, solo sabemos que queremos 
+ser más modernos y competitivos.
+
+[00:03:45] Consultor: ¿Tenéis algún caso de uso específico o problema concreto que queráis resolver?
+
+[00:04:00] Juan: Hmm, problemas tenemos muchos, pero no sabría decirte cuál priorizar. Quizás el tema de 
+reportes toma mucho tiempo, o la gestión de clientes no es buena, o el inventario se pierde... son muchas cosas.
+
+[00:05:10] Consultor: ¿Y qué presupuesto o timeline tenéis en mente?
+
+[00:05:25] Juan: Eso también está por definir. Queremos algo rápido, pero que sea bueno. No tenemos un presupuesto 
+cerrado todavía, pero tampoco queremos gastar demasiado. Quizás en unos meses lo tengamos claro.
+
+[00:06:35] Consultor: ¿Y el equipo técnico con el que contáis?
+
+[00:06:50] Juan: Tenemos algunos desarrolladores internos, pero no son muchos. Y la verdad es que no están muy 
+actualizados con las tecnologías nuevas. Por eso queríamos hablar con vosotros, para que nos asesoréis.
+
+[00:08:00] Consultor: Entiendo. Entonces, para resumir: queréis modernizar procesos, integrar sistemas, 
+automatizar con IA/blockchain/ML, pero sin requisitos claros, sin presupuesto definido, sin timeline específico, 
+y con un equipo técnico limitado.
+
+[00:08:30] Juan: Sí, más o menos. ¿Podéis hacernos una estimación de cuánto costaría todo esto?
+
+[00:08:45] Consultor: Juan, sin requisitos claros y sin un alcance definido, es muy difícil hacer una estimación 
+precisa. Necesitaríamos que primero definierais qué queréis exactamente, priorizar los casos de uso, y establecer 
+un presupuesto realista.
+
+[00:09:30] Juan: Bueno, por eso os hemos llamado, para que nos ayudéis con eso. ¿No podéis darnos al menos un 
+rango orientativo?
+
+[00:09:50] Consultor: Sin información concreta, cualquier número que te dé sería inventado y no sería útil. 
+Lo que sí puedo decirte es que proyectos así de abiertos suelen tener mucha incertidumbre y requieren una fase 
+de descubrimiento antes de poder estimar.
+
+[00:10:40] Juan: Vale, entiendo. Entonces, ¿qué hacemos?
+
+[00:10:50] Consultor: Lo primero sería organizar talleres con cada departamento para entender sus necesidades 
+reales, priorizar los casos de uso, y definir un MVP. Después podríamos hacer una estimación más realista.
+
+[00:11:30] Juan: Perfecto, hagamos eso entonces. Gracias por la asesoría.
