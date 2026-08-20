@@ -14,7 +14,7 @@ WORKDIR /app
 
 # Copy dependency manifests first — Docker caches layers, so if these haven't
 # changed, the expensive uv sync is skipped on subsequent builds.
-COPY pyproject.toml uv.lock ./
+COPY pyproject.toml ./
 
 # Install dependencies into a local .venv inside /app.
 # --no-install-project: only install deps, not our own package yet.
@@ -50,7 +50,7 @@ COPY data/ data/
 # Copy prompts (Jinja2 templates)
 COPY src/prompts/ src/prompts/
 
-# Add the .venv binaries to PATH so we can call `uvicorn` directly
+# Add the .venv binaries to PATH so we can call `uvicorn` and `streamlit` directly
 ENV PATH="/app/.venv/bin:$PATH"
 
 # Download the spaCy Spanish model required by Presidio for PII detection.
