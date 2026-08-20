@@ -103,6 +103,10 @@ class Settings(BaseSettings):
     # Logfire configuration
     logfire_service_name: str = "sw-estimator"
 
+    # --- Session 14 — multi-agent human-in-the-loop ---
+    # Confidence threshold for human review gate
+    confidence_threshold: float = 0.7
+
     # --- Session 9/10 — generation and retrieval settings ---
     # Embedding model for vector search
     embedding_model: str = "text-embedding-3-small"
