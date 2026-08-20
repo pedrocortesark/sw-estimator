@@ -146,3 +146,70 @@ class CommercialProposal(BaseModel):
     body_markdown: str = Field(
         description="The full proposal as Markdown, grounded ONLY in the validated estimate."
     )
+
+
+# --------------------------------------------------------------------------- #
+# Session 14 — the supervisor's routing decision                              #
+# --------------------------------------------------------------------------- #
+SupervisorTarget = Literal[
+    "requirements_extractor",
+    "budget_searcher",
+    "estimate_generator",
+    "coherence_validator",
+    "finish",
+]
+
+
+class SupervisorDecision(BaseModel):
+    next_agent: SupervisorTarget = Field(
+        description="The specialist that must act next, or 'finish' when the estimate "
+        "has been produced and validated."
+    )
+    reason: str = Field(
+        description="One line: what the state already contains, what is still missing, "
+        "and why THIS agent is the one that can produce it."
+    )
+    confidence: Confidence = Field(
+        default="medium", description="How sure the router is about this hand-over."
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Session 14 (LIVE) — the competition pattern                                 #
+# --------------------------------------------------------------------------- #
+Stance = Literal["conservative", "aggressive"]
+
+
+class EstimateProposal(BaseModel):
+    stance: Stance = Field(description="Which estimator produced this proposal.")
+    total_engineer_days: int = Field(
+        ge=0, description="This stance's headline effort in engineer-days."
+    )
+    assumptions: list[str] = Field(
+        default_factory=list,
+        description="The load-bearing assumptions this number rests on.",
+    )
+    risks: list[str] = Field(
+        default_factory=list,
+        description="What could make the real effort diverge from this number.",
+    )
+    reasoning: str = Field(description="One paragraph: how the number was reached.")
+
+
+class SynthesizedEstimate(BaseModel):
+    low: int = Field(ge=0, description="Lower bound of the estimate range (engineer-days).")
+    high: int = Field(ge=0, description="Upper bound of the estimate range (engineer-days).")
+    driving_assumptions: list[str] = Field(
+        default_factory=list,
+        description="The assumptions that most move the number between low and high.",
+    )
+    open_questions: list[str] = Field(
+        default_factory=list,
+        description="Questions whose answers would narrow the range.",
+    )
+    confidence: Confidence = Field(
+        default="medium", description="Confidence in the range as a whole."
+    )
+    reasoning: str = Field(
+        description="Short prose on how the bracket was set — explicitly NOT an average."
+    )

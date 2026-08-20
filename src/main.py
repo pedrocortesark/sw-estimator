@@ -51,16 +51,27 @@ async def lifespan(app: FastAPI):
     # the unrelated routers.
     app.state.graph = None
     app.state.multi_agent_graph = None
+    app.state.supervisor_graph = None
     app.state._graph_stack = AsyncExitStack()
     try:
         from src.domain.graph.build import build_graph
         from src.domain.multi_agent.build import build_multi_agent_graph
+        from src.domain.graph.supervisor.build import build_supervisor_graph
         from src.domain.graph.checkpointer import open_checkpointer
 
         checkpointer = await app.state._graph_stack.enter_async_context(open_checkpointer())
         app.state.graph = build_graph(checkpointer)
         app.state.multi_agent_graph = build_multi_agent_graph(checkpointer)
-        log.info("graphs_ready")
+        app.state.supervisor_graph = build_supervisor_graph(
+            checkpointer,
+            competitive=settings.supervisor_competition_enabled,
+            sandboxed=settings.supervisor_persistence_enabled,
+        )
+        log.info(
+            "graphs_ready",
+            supervisor_competitive=settings.supervisor_competition_enabled,
+            supervisor_sandboxed=settings.supervisor_persistence_enabled,
+        )
     except Exception as exc:  # noqa: BLE001 — the graph is optional infrastructure.
         log.error("graph_init_failed", error=str(exc)[:400])
 

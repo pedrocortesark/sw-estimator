@@ -305,8 +305,8 @@ async def dispatch_tool(
     name: str,
     raw_args: dict[str, Any],
     *,
-    backend: RetrievalBackend,
-    consensus_fn: ConsensusFn,
+    backend: RetrievalBackend | None = None,
+    consensus_fn: ConsensusFn | None = None,
 ) -> dict[str, Any]:
     """Route a tool call to its implementation.
 

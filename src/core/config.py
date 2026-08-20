@@ -104,8 +104,16 @@ class Settings(BaseSettings):
     logfire_service_name: str = "sw-estimator"
 
     # --- Session 14 — multi-agent human-in-the-loop ---
-    # Confidence threshold for human review gate
     confidence_threshold: float = 0.7
+    supervisor_router_model: str = "gpt-4o-mini"
+    supervisor_max_steps: int = 8
+    supervisor_confidence_threshold: float = 0.6
+    supervisor_min_grounded_ratio: float = 0.5
+    supervisor_privilege_strict: bool = False
+    supervisor_audit_args_preview_chars: int = 200
+    supervisor_competition_enabled: bool = False
+    supervisor_divergence_penalty: float = 0.4
+    supervisor_persistence_enabled: bool = False
 
     # --- Session 9/10 — generation and retrieval settings ---
     # Embedding model for vector search
