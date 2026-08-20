@@ -20,8 +20,17 @@ import streamlit as st
 # ---------------------------------------------------------------------------
 
 API_BASE = os.environ.get("ESTIMATOR_API_URL", "http://localhost:8000").rstrip("/")
+SERVICE_TOKEN = os.environ.get("SERVICE_TOKEN", "")
 TIMEOUT_SECONDS = 120
 HOURS_PER_WEEK = 32  # matches system prompt rate
+
+
+def _headers() -> dict[str, str]:
+    """Return HTTP headers including the service token if configured."""
+    headers: dict[str, str] = {}
+    if SERVICE_TOKEN:
+        headers["X-Service-Token"] = SERVICE_TOKEN
+    return headers
 
 
 # ---------------------------------------------------------------------------
@@ -49,14 +58,14 @@ class UpstreamError(Exception):
 
 def _create_session() -> str:
     """POST /api/v1/sessions → returns the new session_id."""
-    resp = httpx.post(f"{API_BASE}/api/v1/sessions", timeout=10)
+    resp = httpx.post(f"{API_BASE}/api/v1/sessions", timeout=10, headers=_headers())
     resp.raise_for_status()
     return resp.json()["session_id"]
 
 
 def _get_session_info(session_id: str) -> dict:
     """GET /api/v1/sessions/{id} → {session_id, turn_count, project_metadata}."""
-    resp = httpx.get(f"{API_BASE}/api/v1/sessions/{session_id}", timeout=10)
+    resp = httpx.get(f"{API_BASE}/api/v1/sessions/{session_id}", timeout=10, headers=_headers())
     resp.raise_for_status()
     return resp.json()
 
@@ -83,6 +92,7 @@ def _call_session_estimate(
         data={"transcript": transcript},
         files=files or None,
         timeout=TIMEOUT_SECONDS,
+        headers=_headers(),
     )
 
     if resp.status_code == 200:

@@ -103,6 +103,11 @@ class Settings(BaseSettings):
     # Logfire configuration
     logfire_service_name: str = "sw-estimator"
 
+    # --- Session 15 — inter-service authentication ----------------------------
+    # Shared secret for service-to-service calls (e.g. business-backend -> AI service).
+    # When set, endpoints require X-Service-Token header. Empty = auth disabled (dev).
+    service_token: str = ""
+
     # --- Session 14 — multi-agent human-in-the-loop ---
     confidence_threshold: float = 0.7
     supervisor_router_model: str = "gpt-4o-mini"

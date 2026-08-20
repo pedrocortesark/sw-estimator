@@ -6,6 +6,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile, status
 from pydantic import BaseModel
 
+from src.api.security import require_service_token
 from src.dependencies import get_estimation_service
 from src.schemas.estimation import EstimationRequest, EstimationResponse
 from src.services.document_extractor import (
@@ -19,7 +20,7 @@ from src.services.sessions import session_store
 from src.services.summarizer import update_summary
 from src.services.tier_resolver import resolve_tier
 
-router = APIRouter(prefix="/api/v1", tags=["Sessions"])
+router = APIRouter(prefix="/api/v1", tags=["Sessions"], dependencies=[Depends(require_service_token)])
 
 
 class SessionCreateResponse(BaseModel):
