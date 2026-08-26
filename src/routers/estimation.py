@@ -6,6 +6,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query, status
 from fastapi.responses import StreamingResponse
 
+from src.api.security import require_service_token
 from src.dependencies import get_estimation_service
 from src.schemas.estimation import EstimationRequest, EstimationResponse
 from src.services.estimation import EstimationService
@@ -14,7 +15,7 @@ from src.services.llm_service import (
 )
 from src.prompts.loader import render_estimation_prompt
 
-router = APIRouter(prefix="/api/v1", tags=["Estimation"])
+router = APIRouter(prefix="/api/v1", tags=["Estimation"], dependencies=[Depends(require_service_token)])
 
 
 @router.post(

@@ -1,83 +1,72 @@
 services:
-  api:
+  # ===========================================================================
+  # AI Service (FastAPI) — Internal only, NOT exposed to the host.
+  # This is the core estimation service. It is reachable only from within the
+  # Docker network by other services (streamlit, future business-backend).
+  # ===========================================================================
+  ai-service:
     build:
       context: .
       dockerfile: Dockerfile
-      target: runtime # Use the runtime stage (not the builder)
-
+      target: runtime
     image: sw-estimator:latest
-
-    ports:
-      - "8000:8000" # host_port:container_port
-
-    # Load environment variables from .env file.
-    # The .env file is NEVER copied into the image (see .dockerignore).
-    # It is only read at runtime by docker compose on the host machine.
+    # NO "ports:" — internal only, not reachable from the host.
+    # This is the key security property: the AI service cannot be accessed
+    # directly from outside the Docker network.
     env_file:
       - .env
-
-    # Override specific env vars for the containerised environment.
-    # APP_ENV=production hides /docs and /redoc endpoints.
     environment:
       - APP_ENV=production
       - REDIS_URL=redis://redis:6379
       - DATABASE_URL=postgresql+asyncpg://estimator:estimator@postgres:5432/estimator
-
-    # Restart policy: restart the container automatically if it crashes.
-    # "unless-stopped" means it restarts on failure but not if you stop it manually.
     restart: unless-stopped
-    # docker compose respects the HEALTHCHECK defined in the Dockerfile.
-    # You can check status with: docker compose ps
     depends_on:
       redis:
         condition: service_healthy
       postgres:
         condition: service_healthy
 
+  # ===========================================================================
+  # Streamlit Frontend — Public entry point.
+  # This is the ONLY service exposed to the host (besides the databases for
+  # development convenience). Users interact with the system through this UI.
+  # ===========================================================================
   streamlit:
-    image: sw-estimator:latest # same image, different command
-    command: [ "streamlit", "run", "app/streamlit_app.py", "--server.port=8501", "--server.address=0.0.0.0", "--server.headless=true" ]
+    image: sw-estimator:latest
+    command: ["python", "-m", "streamlit", "run", "app/streamlit_app.py", "--server.port=8501", "--server.address=0.0.0.0", "--server.headless=true"]
     ports:
-      - "8501:8501"
+      - "8501:8501"  # Public entry point — users access the UI here
     env_file:
       - .env
     environment:
-      - ESTIMATOR_API_URL=http://api:8000 # internal docker network
+      # Streamlit reaches the AI service via internal Docker DNS
+      - ESTIMATOR_API_URL=http://ai-service:8000
+      - SERVICE_TOKEN=${SERVICE_TOKEN}
     restart: unless-stopped
     depends_on:
-      - api
+      - ai-service
 
-  blazor:
-    build:
-      context: ./frontend/SwEstimator.Client
-      dockerfile: Dockerfile
-    ports:
-      - "8080:80"
-    restart: unless-stopped
-    depends_on:
-      - api
-
-  # Redis Stack includes RediSearch, which provides the FT.CREATE / FT.SEARCH
-  # commands required by the semantic cache's vector index.
-  # Vanilla redis:alpine does NOT include RediSearch and will fail with
-  # "ERR unknown command 'FT.CREATE'" when EstimationSemanticCache.create() runs.
+  # ===========================================================================
+  # Redis Stack — Semantic cache + vector search (RediSearch).
+  # Exposed on host:6380 for development convenience (inspect with redis-cli).
+  # ===========================================================================
   redis:
     image: redis/redis-stack-server:latest
     ports:
-      - "6380:6379" # Redis Stack on host:6380 (6379 is taken by another Redis)
+      - "6380:6379"
     volumes:
       - redis_data:/data
     restart: unless-stopped
     healthcheck:
-      test: [ "CMD", "redis-cli", "ping" ]
+      test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 3s
       retries: 5
 
-  # Postgres with pgvector (Session 8). The pgvector/pgvector:pg16 image
-  # ships the extension compiled — a single ``CREATE EXTENSION vector`` is
-  # enough. 5432 on the host (no collision here, unlike the antonio-project
-  # monorepo setup).
+  # ===========================================================================
+  # PostgreSQL + pgvector — Persistence layer.
+  # Exposed on host:5432 for development (run migrations, inspect data).
+  # ===========================================================================
   postgres:
     image: pgvector/pgvector:pg16
     environment:
